@@ -1,0 +1,106 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extName__",
+  "version": "4.6.2",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "quietbrowse@quietbrowse",
+      "strict_min_version": "121.0"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "declarativeNetRequest",
+    "storage",
+    "tabs",
+    "webNavigation",
+    "webRequest",
+    "cookies",
+    "downloads",
+    "notifications",
+    "contextMenus",
+    "alarms",
+    "scripting",
+    "unlimitedStorage"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "scripts": [
+      "trackers.js",
+      "psl_data.js",
+      "utils.js",
+      "phish_score.js",
+      "filter_compiler.js",
+      "cosmetic_filters.js",
+      "bg_constants.js",
+      "bg_filters.js",
+      "bg_cname.js",
+      "bg_scriptlets.js",
+      "bg_learning.js",
+      "bg_custom.js",
+      "bg_sync.js",
+      "background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "utils.js",
+        "phish_score.js",
+        "content.js",
+        "cookie_reject.js",
+        "zapper.js",
+        "shield.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "quiet_rules",
+        "enabled": true,
+        "path": "rules.json"
+      },
+      {
+        "id": "quiet_easylist",
+        "enabled": true,
+        "path": "easylist_rules.json"
+      },
+      {
+        "id": "quiet_privacy",
+        "enabled": true,
+        "path": "privacy_rules.json"
+      }
+    ]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "start-zapper": {
+      "suggested_key": {
+        "default": "Alt+Z"
+      },
+      "description": "__MSG_zapCommandDescription__"
+    }
+  },
+  "action": {
+    "default_title": "__MSG_actionDefaultTitle__",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

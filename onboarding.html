@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title data-i18n="onboardingTitle">Welcome to QuietBrowse</title>
+  <link rel="stylesheet" href="onboarding.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="hero-icon">🛡️</div>
+      <h1 data-i18n="onboardingTitle">Welcome to QuietBrowse</h1>
+      <p class="lead" data-i18n="onboardingLead">Your privacy shield is active. Here's what QuietBrowse does for you.</p>
+    </header>
+
+    <section class="features">
+      <article class="feature">
+        <div class="feature-icon">🚫</div>
+        <div>
+          <h2 data-i18n="featBlocksAdsTitle">Blocks ads &amp; trackers</h2>
+          <p data-i18n="featBlocksAdsDesc">Full EasyList coverage stops ads, trackers, and annoyances. The toolbar badge shows how many requests were blocked on each page.</p>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">🧠</div>
+        <div>
+          <h2 data-i18n="featLearnsTitle">Learns new trackers</h2>
+          <p data-i18n="featLearnsDesc">Like Privacy Badger, QuietBrowse watches third-party domains. If something follows you across sites, it gets auto-blocked.</p>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">🔒</div>
+        <div>
+          <h2 data-i18n="featPasswordTitle">Password shield</h2>
+          <p data-i18n="featPasswordDesc">Copying from a password field puts random junk on your clipboard instead. Scripts that secretly reveal passwords get re-masked.</p>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">⚠️</div>
+        <div>
+          <h2 data-i18n="featPhishingTitle">Phishing warnings</h2>
+          <p data-i18n="featPhishingDesc">Lookalike domains, risky addresses, and unencrypted login pages trigger warnings. The popup shows a trust score for each site.</p>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">✂️</div>
+        <div>
+          <h2 data-i18n="featZapperTitle">Element zapper</h2>
+          <p data-i18n="featZapperDesc">Right-click any page and choose <strong>Zap element on this page</strong>, or use the button in the popup, to permanently hide annoyances.</p>
+        </div>
+      </article>
+      <article class="feature">
+        <div class="feature-icon">📊</div>
+        <div>
+          <h2 data-i18n="featSettingsTitle">Settings &amp; stats</h2>
+          <p data-i18n="featSettingsDesc">Open Settings from the popup to manage your whitelist, learned trackers, zapped elements, and view blocking stats over time.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="tips">
+      <h2 data-i18n="quickTipsTitle">Quick tips</h2>
+      <ul>
+        <li data-i18n="tipShield">Click the big shield in the popup to turn protection on or off globally.</li>
+        <li data-i18n="tipFixSite">If a site breaks, click <strong>Fix this site</strong> in the popup, then reload.</li>
+        <li data-i18n="tipPin">Pin QuietBrowse from the puzzle-piece menu for quick access.</li>
+        <li data-i18n="tipPrivacy">No data leaves your device — see our <a id="privacyLink" href="#">Privacy Policy</a>.</li>
+      </ul>
+    </section>
+
+    <footer>
+      <button id="openOptions" class="btn secondary" data-i18n="openSettingsBtn">Open Settings</button>
+      <button id="doneBtn" class="btn primary" data-i18n="startBrowsingBtn">Start browsing</button>
+    </footer>
+  </div>
+  <script src="i18n_dom.js"></script>
+  <script src="onboarding.js"></script>
+</body>
+</html>

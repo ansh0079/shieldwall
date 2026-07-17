@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuietBrowse Privacy Policy</title>
+  <style>
+    body { font-family: "Segoe UI", system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #1f2328; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 18px; margin-top: 28px; }
+    p, li { font-size: 15px; color: #374151; }
+    .lead { font-size: 17px; color: #111; }
+    .updated { color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>QuietBrowse Privacy Policy</h1>
+  <p class="updated">Last updated: July 15, 2026</p>
+
+  <p class="lead"><strong>QuietBrowse collects no personal data.</strong> We do not operate servers that receive your browsing history, passwords, or identity. The extension works entirely inside your browser.</p>
+
+  <h2>What stays on your device</h2>
+  <p>QuietBrowse stores the following locally using Chrome's extension storage APIs (<code>chrome.storage.local</code> and <code>chrome.storage.session</code>):</p>
+  <ul>
+    <li>Your settings (protection on/off, site rules, feature toggles)</li>
+    <li>Block statistics (estimated counts per day and total)</li>
+    <li>Trackers learned by the heuristic engine</li>
+    <li>Elements you manually "zapped" to hide</li>
+    <li>Cached cosmetic filter data from filter-list updates</li>
+  </ul>
+  <p>Removing the extension deletes this data. We cannot access it remotely.</p>
+
+  <h2>Network connections</h2>
+  <p>By default, QuietBrowse downloads public ad-blocking filter lists from:</p>
+  <ul>
+    <li><a href="https://easylist.to/easylist/easylist.txt">easylist.to/easylist/easylist.txt</a></li>
+    <li><a href="https://easylist.to/easylist/easyprivacy.txt">easylist.to/easylist/easyprivacy.txt</a></li>
+  </ul>
+  <p>These requests go directly from your browser to easylist.to. QuietBrowse does not proxy, log, or relay that traffic. EasyList's own privacy practices apply to those requests.</p>
+  <p>If you enable optional lists in Settings, additional requests go to:</p>
+  <ul>
+    <li><strong>Fanboy Annoyance / Cookie / Social</strong> — <a href="https://secure.fanboy.co.nz/">secure.fanboy.co.nz</a></li>
+  </ul>
+  <p>If you add a custom filter-list URL in Settings, QuietBrowse also downloads that list directly from the URL you provide.</p>
+  <p>All filter-list downloads go directly from your browser to the respective host. QuietBrowse does not proxy, log, or relay those requests.</p>
+
+  <h2>What we do not do</h2>
+  <ul>
+    <li>No accounts or sign-in</li>
+    <li>No analytics, crash reporting, or telemetry SDKs</li>
+    <li>No selling or sharing of data (there is no data to sell)</li>
+    <li>No remote code execution except filter-list text compiled locally</li>
+    <li>No affiliation with Microsoft, Google, or antivirus vendors</li>
+  </ul>
+
+  <h2>Permissions</h2>
+  <p>QuietBrowse requests broad host access because blocking ads and trackers requires inspecting network requests on pages you visit. Each permission is used only for the features described in the extension and in our permission documentation. See the source code — behavior is verifiable.</p>
+
+  <h2>Children</h2>
+  <p>QuietBrowse is not directed at children under 13 and does not knowingly collect information from anyone.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the updated version will ship with a new extension release. Material changes will be noted in release notes.</p>
+
+  <h2>Contact</h2>
+  <p>For privacy questions about QuietBrowse, contact the developer through the Chrome Web Store listing support channel or the project's public repository.</p>
+
+  <p><a href="terms.html">Terms of Service</a></p>
+</body>
+</html>

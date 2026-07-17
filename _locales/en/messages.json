@@ -1,0 +1,989 @@
+{
+  "extName": {
+    "message": "QuietBrowse",
+    "description": "Extension name."
+  },
+  "extDescription": {
+    "message": "Blocks ads and trackers locally on your device. Learns new trackers, warns about suspicious sites, and protects passwords — with zero data collection.",
+    "description": "Extension description in the Chrome Web Store and manifest."
+  },
+  "actionDefaultTitle": {
+    "message": "QuietBrowse",
+    "description": "Tooltip shown when hovering the toolbar icon."
+  },
+  "optionsTitle": {
+    "message": "QuietBrowse Settings",
+    "description": "Options page title."
+  },
+  "optionsHeaderTitle": {
+    "message": "QuietBrowse Settings",
+    "description": "Options page header."
+  },
+  "optionsHeaderSubtitle": {
+    "message": "Manage site rules, trackers, custom rules, zapped elements, and stats",
+    "description": "Options page subtitle."
+  },
+  "tabStats": {
+    "message": "Statistics",
+    "description": "Navigation tab label."
+  },
+  "tabFilters": {
+    "message": "Filter lists",
+    "description": "Navigation tab label."
+  },
+  "tabSiteRules": {
+    "message": "Site rules",
+    "description": "Navigation tab label."
+  },
+  "tabObserved": {
+    "message": "Observed trackers",
+    "description": "Navigation tab label."
+  },
+  "tabCustom": {
+    "message": "Custom rules",
+    "description": "Navigation tab label."
+  },
+  "tabLearned": {
+    "message": "Learned Trackers",
+    "description": "Navigation tab label."
+  },
+  "tabZapped": {
+    "message": "Zapped Elements",
+    "description": "Navigation tab label."
+  },
+  "tabReports": {
+    "message": "Site reports",
+    "description": "Navigation tab label."
+  },
+  "tabCredits": {
+    "message": "Licenses",
+    "description": "Navigation tab label."
+  },
+  "statTotalBlocked": {
+    "message": "Total blocked",
+    "description": "Statistics card label."
+  },
+  "statBlockedToday": {
+    "message": "Blocked today",
+    "description": "Statistics card label."
+  },
+  "statLearnedTrackers": {
+    "message": "Learned trackers",
+    "description": "Statistics card label."
+  },
+  "chartTitle": {
+    "message": "Blocked per day (last 30 days)",
+    "description": "Chart heading."
+  },
+  "chartNote": {
+    "message": "Block counts are estimated from network blocks on your device. The toolbar badge is maintained by Chrome's declarativeNetRequest API. Nothing is sent to a server.",
+    "description": "Privacy note under the statistics chart."
+  },
+  "filterListsHeading": {
+    "message": "Filter lists",
+    "description": "Heading for the filter lists section."
+  },
+  "filterListsDesc": {
+    "message": "EasyList and EasyPrivacy refresh automatically. Manage optional lists on the Filter lists tab.",
+    "description": "Description on the Statistics panel."
+  },
+  "scriptletsHeading": {
+    "message": "Scriptlets",
+    "description": "Heading for the scriptlets section."
+  },
+  "protectionHeading": {
+    "message": "Protection",
+    "description": "Heading for global protection toggles in settings."
+  },
+  "protectionDesc": {
+    "message": "Global shields and privacy signals. Per-site mode stays in the toolbar popup.",
+    "description": "Description for the protection section in settings."
+  },
+  "scriptletsDesc": {
+    "message": "Extra page-level protections that network blocking alone cannot provide.",
+    "description": "Description for the scriptlets section."
+  },
+  "scriptletCatalogLabel": {
+    "message": "Scriptlet catalog (site-keyed abort-on-property-read / set-constant)",
+    "description": "Toggle label."
+  },
+  "antiAdblockLabel": {
+    "message": "Anti-adblock bait (opt-in; helps pages that refuse to load when they detect blockers)",
+    "description": "Toggle label."
+  },
+  "cnameUncloakLabel": {
+    "message": "CNAME uncloaking (block known first-party tracker aliases)",
+    "description": "Toggle label."
+  },
+  "backupRestoreHeading": {
+    "message": "Backup & restore",
+    "description": "Heading for backup section."
+  },
+  "backupRestoreDesc": {
+    "message": "Export all QuietBrowse data (site rules, learned trackers, observed trackers, custom rules, custom filter lists, zapped elements, and stats) as JSON, or restore from a previous export.",
+    "description": "Description for backup section."
+  },
+  "exportAllBtn": {
+    "message": "Export all data",
+    "description": "Button label."
+  },
+  "restoreAllBtn": {
+    "message": "Restore from backup…",
+    "description": "Button label."
+  },
+  "attributionText": {
+    "message": "Filter lists from EasyList / EasyPrivacy (CC BY-SA 3.0 / GPL-3.0). See the Licenses tab.",
+    "description": "Attribution text."
+  },
+  "filtersTabHeading": {
+    "message": "Filter lists",
+    "description": "Filter lists tab heading."
+  },
+  "filtersTabDesc": {
+    "message": "EasyList and EasyPrivacy are always enabled and refresh automatically every 24 hours. Optional lists and custom URLs are merged on update (Chrome caps dynamic rules at ~30k).",
+    "description": "Filter lists tab description."
+  },
+  "updateNowBtn": {
+    "message": "Update now",
+    "description": "Button label."
+  },
+  "alwaysOnHeading": {
+    "message": "Always on",
+    "description": "Subheading."
+  },
+  "optionalListsHeading": {
+    "message": "Optional lists",
+    "description": "Subheading."
+  },
+  "optionalListsNote": {
+    "message": "Fanboy Annoyance already includes Cookie + Social — prefer one or the other.",
+    "description": "Note under optional lists."
+  },
+  "customListsHeading": {
+    "message": "Custom lists",
+    "description": "Subheading."
+  },
+  "customListUrlPlaceholder": {
+    "message": "https://easylist.to/easylistgermany/easylistgermany.txt",
+    "description": "Placeholder for custom list URL input."
+  },
+  "customListTitlePlaceholder": {
+    "message": "Title (optional)",
+    "description": "Placeholder for custom list title input."
+  },
+  "addListBtn": {
+    "message": "Add list",
+    "description": "Button label."
+  },
+  "noCustomLists": {
+    "message": "No custom filter lists added.",
+    "description": "Empty state message."
+  },
+  "siteRulesHeading": {
+    "message": "Site rules",
+    "description": "Site rules tab heading."
+  },
+  "siteRulesDesc": {
+    "message": "Override protection for specific domains. Allow ads keeps blocking trackers and analytics; Pause disables all blocking on that site.",
+    "description": "Site rules tab description."
+  },
+  "siteRulesDomainPlaceholder": {
+    "message": "example.com",
+    "description": "Placeholder for site rule domain input."
+  },
+  "siteRulesModeAllowAds": {
+    "message": "Allow ads",
+    "description": "Site mode option."
+  },
+  "siteRulesModePause": {
+    "message": "Pause",
+    "description": "Site mode option."
+  },
+  "addSiteRuleBtn": {
+    "message": "Add rule",
+    "description": "Button label."
+  },
+  "noSiteRules": {
+    "message": "No custom site rules — all sites use full protection.",
+    "description": "Empty state message."
+  },
+  "observedHeading": {
+    "message": "Observed trackers",
+    "description": "Observed trackers tab heading."
+  },
+  "observedDesc": {
+    "message": "Trackers QuietBrowse has blocked while you browse. Domains still being watched (not yet auto-blocked) appear below.",
+    "description": "Observed trackers tab description."
+  },
+  "watchingHeading": {
+    "message": "Watching (not blocked yet)",
+    "description": "Subheading."
+  },
+  "watchingDesc": {
+    "message": "Third-party domains seen with cookies across sites. After 3 sites they are flagged for review below — or blocked automatically if you enable auto-block.",
+    "description": "Watching section description."
+  },
+  "blockedHistoryHeading": {
+    "message": "Blocked history",
+    "description": "Subheading."
+  },
+  "observedFilterPlaceholder": {
+    "message": "Search trackers or domains…",
+    "description": "Placeholder for observed tracker filter input."
+  },
+  "sortLastSeen": {
+    "message": "Last seen",
+    "description": "Sort option."
+  },
+  "sortMostBlocked": {
+    "message": "Most blocked",
+    "description": "Sort option."
+  },
+  "sortMostSites": {
+    "message": "Most sites",
+    "description": "Sort option."
+  },
+  "sortName": {
+    "message": "Name",
+    "description": "Sort option."
+  },
+  "clearHistoryBtn": {
+    "message": "Clear history",
+    "description": "Button label."
+  },
+  "noObserved": {
+    "message": "No observed trackers yet — keep browsing and QuietBrowse will build this list.",
+    "description": "Empty state message."
+  },
+  "noWatching": {
+    "message": "No trackers being watched yet.",
+    "description": "Empty state message."
+  },
+  "customRulesHeading": {
+    "message": "Custom rules",
+    "description": "Custom rules tab heading."
+  },
+  "customRulesDesc": {
+    "message": "Add your own block or allow rules for specific domains or URL fragments.",
+    "description": "Custom rules tab description."
+  },
+  "customRuleNamePlaceholder": {
+    "message": "Name (optional)",
+    "description": "Placeholder for custom rule name input."
+  },
+  "customRuleActionBlock": {
+    "message": "Block",
+    "description": "Custom rule action."
+  },
+  "customRuleActionAllow": {
+    "message": "Allow",
+    "description": "Custom rule action."
+  },
+  "customRuleTypeDomain": {
+    "message": "domain",
+    "description": "Custom rule type."
+  },
+  "customRuleTypeUrl": {
+    "message": "URL contains",
+    "description": "Custom rule type."
+  },
+  "customRuleScopeAll": {
+    "message": "all",
+    "description": "Custom rule scope label."
+  },
+  "customRuleScopeThirdParty": {
+    "message": "3rd-party",
+    "description": "Custom rule scope label."
+  },
+  "customRuleValuePlaceholder": {
+    "message": "example.com or /tracker.js",
+    "description": "Placeholder for custom rule value input."
+  },
+  "customRuleEnabledLabel": {
+    "message": "Enabled",
+    "description": "Custom rule enabled checkbox label."
+  },
+  "exportRulesBtn": {
+    "message": "Export rules",
+    "description": "Button label."
+  },
+  "importRulesBtn": {
+    "message": "Import rules…",
+    "description": "Button label."
+  },
+  "noCustomRules": {
+    "message": "No custom rules yet.",
+    "description": "Empty state message."
+  },
+  "learnedHeading": {
+    "message": "Learned trackers",
+    "description": "Learned trackers tab heading."
+  },
+  "learnedDesc": {
+    "message": "Domains QuietBrowse auto-blocked after seeing them track you across multiple sites. Unblock if something breaks.",
+    "description": "Learned trackers tab description."
+  },
+  "noLearned": {
+    "message": "No learned trackers yet — keep browsing and QuietBrowse will learn.",
+    "description": "Empty state message."
+  },
+  "zappedHeading": {
+    "message": "Zapped Elements",
+    "description": "Zapped elements tab heading."
+  },
+  "zappedDesc": {
+    "message": "Elements you manually hid with the zapper (right-click a page → “Zap element”, or use the popup button).",
+    "description": "Zapped elements tab description."
+  },
+  "noZapped": {
+    "message": "No zapped elements yet.",
+    "description": "Empty state message."
+  },
+  "reportsHeading": {
+    "message": "Site breakage reports",
+    "description": "Site reports tab heading."
+  },
+  "reportsDesc": {
+    "message": "Saved locally when you click Fix this site in the popup. Nothing is uploaded automatically — export and share if you want to help improve the extension.",
+    "description": "Site reports tab description."
+  },
+  "exportReportsBtn": {
+    "message": "Export JSON",
+    "description": "Button label."
+  },
+  "clearReportsBtn": {
+    "message": "Clear all",
+    "description": "Button label."
+  },
+  "noReports": {
+    "message": "No reports yet.",
+    "description": "Empty state message."
+  },
+  "licensesHeading": {
+    "message": "Licenses & attribution",
+    "description": "Licenses tab heading."
+  },
+  "licensesDesc": {
+    "message": "QuietBrowse original code is licensed under GPL-3.0. Compiled network and cosmetic rules are derivative works of EasyList and EasyPrivacy.",
+    "description": "Licenses tab description."
+  },
+  "popupSiteFallback": {
+    "message": "This page can't be filtered",
+    "description": "Popup label when not on a web page."
+  },
+  "popupTrustScoreLabel": {
+    "message": "Trust score",
+    "description": "Popup trust score label."
+  },
+  "popupBlockedOnPage": {
+    "message": "blocked on page",
+    "description": "Popup statistic label."
+  },
+  "popupBlockedTotal": {
+    "message": "blocked total",
+    "description": "Popup statistic label."
+  },
+  "popupNoTrackersYet": {
+    "message": "No trackers blocked on this page yet.",
+    "description": "Popup empty state."
+  },
+  "popupFixSiteBtn": {
+    "message": "Fix this site",
+    "description": "Popup button label."
+  },
+  "popupSaveLocalReport": {
+    "message": "Save local report",
+    "description": "Popup checkbox label."
+  },
+  "popupFixSiteHint": {
+    "message": "Pauses blocking on this site instantly. Reload the page after.",
+    "description": "Popup hint text."
+  },
+  "popupZapBtn": {
+    "message": "Zap element",
+    "description": "Popup button label."
+  },
+  "popupSettingsLink": {
+    "message": "Settings",
+    "description": "Popup settings link."
+  },
+  "popupProtectionOnSite": {
+    "message": "Protection on this site",
+    "description": "Popup toggle row label."
+  },
+  "popupPrivacySignals": {
+    "message": "Do Not Track + GPC signals",
+    "description": "Popup toggle row label."
+  },
+  "popupCookiePopups": {
+    "message": "Handle cookie pop-ups (reject when possible, then hide)",
+    "description": "Popup toggle row label."
+  },
+  "popupPasswordShield": {
+    "message": "Password shield",
+    "description": "Popup toggle row label."
+  },
+  "popupPhishingWarnings": {
+    "message": "Phishing warnings",
+    "description": "Popup toggle row label."
+  },
+  "popupDownloadGuard": {
+    "message": "Download guard",
+    "description": "Popup toggle row label."
+  },
+  "popupModeFull": {
+    "message": "Full protection",
+    "description": "Popup site mode option."
+  },
+  "popupModeAds": {
+    "message": "Allow ads",
+    "description": "Popup site mode option."
+  },
+  "popupModeOff": {
+    "message": "Pause",
+    "description": "Popup site mode option."
+  },
+  "trustExcellent": {
+    "message": "Excellent",
+    "description": "Trust score label."
+  },
+  "trustGood": {
+    "message": "Good",
+    "description": "Trust score label."
+  },
+  "trustCaution": {
+    "message": "Caution",
+    "description": "Trust score label."
+  },
+  "trustDanger": {
+    "message": "Danger",
+    "description": "Trust score label."
+  },
+  "trustUnknown": {
+    "message": "Unknown",
+    "description": "Trust score label."
+  },
+  "trustOff": {
+    "message": "Protection off",
+    "description": "Trust score label."
+  },
+  "trustUnavailable": {
+    "message": "Trust score unavailable",
+    "description": "Trust score fallback label."
+  },
+  "hintProtectionEnabled": {
+    "message": "Protection enabled",
+    "description": "Popup hint."
+  },
+  "hintProtectionDisabled": {
+    "message": "Protection disabled",
+    "description": "Popup hint."
+  },
+  "hintPrivacySignalsUpdated": {
+    "message": "Privacy signals updated",
+    "description": "Popup hint."
+  },
+  "hintCookieSettingUpdated": {
+    "message": "Cookie pop-up setting updated",
+    "description": "Popup hint."
+  },
+  "hintPasswordShieldUpdated": {
+    "message": "Password shield updated",
+    "description": "Popup hint."
+  },
+  "hintPhishingWarningsUpdated": {
+    "message": "Phishing warnings updated",
+    "description": "Popup hint."
+  },
+  "hintDownloadGuardUpdated": {
+    "message": "Download guard updated",
+    "description": "Popup hint."
+  },
+  "hintSiteMode": {
+    "message": "Site mode: $label$",
+    "description": "Popup hint after changing site mode.",
+    "placeholders": {
+      "label": {
+        "content": "$1",
+        "example": "Full protection"
+      }
+    }
+  },
+  "hintSitePausedReport": {
+    "message": "Site paused & report saved — reload the page",
+    "description": "Popup hint."
+  },
+  "hintSitePaused": {
+    "message": "Site paused — reload the page",
+    "description": "Popup hint."
+  },
+  "hintCantZap": {
+    "message": "Can't zap on this page.",
+    "description": "Popup hint."
+  },
+  "hintCouldNotFixSite": {
+    "message": "Could not fix site.",
+    "description": "Popup hint."
+  },
+  "hintBlockingTracker": {
+    "message": "Blocking $name$",
+    "description": "Popup hint after manually blocking a tracker.",
+    "placeholders": {
+      "name": {
+        "content": "$1",
+        "example": "doubleclick.net"
+      }
+    }
+  },
+  "hintCouldNotBlockTracker": {
+    "message": "Could not block tracker",
+    "description": "Popup hint when manually blocking a tracker fails."
+  },
+  "hintDownloadGuardDenied": {
+    "message": "Download guard permission denied",
+    "description": "Popup hint when download guard permission is denied."
+  },
+  "trustScoreOff": {
+    "message": "Off",
+    "description": "Trust score numeric display when protection is off."
+  },
+  "shieldBtnOn": {
+    "message": "Protection is ON — click to disable",
+    "description": "Tooltip."
+  },
+  "shieldBtnOff": {
+    "message": "Protection is OFF — click to enable",
+    "description": "Tooltip."
+  },
+  "learnedFooter": {
+    "message": "$count$ tracker(s) learned",
+    "description": "Popup footer text.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "catAdvertising": {
+    "message": "Advertising",
+    "description": "Tracker category label."
+  },
+  "catAnalytics": {
+    "message": "Analytics",
+    "description": "Tracker category label."
+  },
+  "catSocial": {
+    "message": "Social",
+    "description": "Tracker category label."
+  },
+  "catOther": {
+    "message": "Other",
+    "description": "Tracker category label."
+  },
+  "catLearned": {
+    "message": "Learned",
+    "description": "Tracker category label."
+  },
+  "siteModeFull": {
+    "message": "Full protection",
+    "description": "Site mode label."
+  },
+  "siteModeAds": {
+    "message": "Allow ads",
+    "description": "Site mode label."
+  },
+  "siteModeOff": {
+    "message": "Paused",
+    "description": "Site mode label."
+  },
+  "btnDisable": {
+    "message": "Disable",
+    "description": "Button label."
+  },
+  "btnEnable": {
+    "message": "Enable",
+    "description": "Button label."
+  },
+  "btnRemove": {
+    "message": "Remove",
+    "description": "Button label."
+  },
+  "btnUnblock": {
+    "message": "Unblock",
+    "description": "Button label."
+  },
+  "btnBlock": {
+    "message": "Block",
+    "description": "Button label."
+  },
+  "btnBlockNow": {
+    "message": "Block now",
+    "description": "Button label."
+  },
+  "btnForget": {
+    "message": "Forget",
+    "description": "Button label."
+  },
+  "btnAllowSite": {
+    "message": "Allow site",
+    "description": "Button label."
+  },
+  "btnClearAll": {
+    "message": "Clear all",
+    "description": "Button label."
+  },
+  "dialogConfirmClearObserved": {
+    "message": "Clear all observed tracker history?",
+    "description": "Confirmation dialog."
+  },
+  "dialogConfirmClearReports": {
+    "message": "Clear all saved site reports?",
+    "description": "Confirmation dialog."
+  },
+  "dialogConfirmClearZappedDomain": {
+    "message": "Clear all zapped elements for $domain$?",
+    "description": "Confirmation dialog.",
+    "placeholders": {
+      "domain": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "alertInvalidDomain": {
+    "message": "Enter a valid domain like example.com",
+    "description": "Alert message."
+  },
+  "alertInvalidBackup": {
+    "message": "Invalid backup file",
+    "description": "Alert message."
+  },
+  "genericAddFailed": {
+    "message": "Failed to add rule",
+    "description": "Error message."
+  },
+  "importFailed": {
+    "message": "Import failed: $error$",
+    "description": "Alert message.",
+    "placeholders": {
+      "error": {
+        "content": "$1",
+        "example": "unknown error"
+      }
+    }
+  },
+  "alertInvalidJson": {
+    "message": "Invalid JSON file: $error$",
+    "description": "Alert message.",
+    "placeholders": {
+      "error": {
+        "content": "$1",
+        "example": "Unexpected token"
+      }
+    }
+  },
+  "filterStatusLastUpdated": {
+    "message": "Last updated $date$.",
+    "description": "Filter status text.",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Jan 1, 2024"
+      }
+    }
+  },
+  "filterStatusBundled": {
+    "message": "Currently using the lists bundled with the extension.",
+    "description": "Filter status text."
+  },
+  "filterStatusFailed": {
+    "message": " Last update attempt failed ($date$): $message$",
+    "description": "Filter status text.",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Jan 1, 2024"
+      },
+      "message": {
+        "content": "$2",
+        "example": "network error"
+      }
+    }
+  },
+  "filterUpdateSuccess": {
+    "message": "Filter lists updated — $count$ blocking rules active.",
+    "description": "Alert message.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "15000"
+      }
+    }
+  },
+  "filterUpdateFailed": {
+    "message": "Update failed: $error$\\nQuietBrowse keeps using its current lists.",
+    "description": "Alert message.",
+    "placeholders": {
+      "error": {
+        "content": "$1",
+        "example": "network error"
+      }
+    }
+  },
+  "optionalListEnabledPrompt": {
+    "message": "List enabled. Update filter lists now to download and apply it?",
+    "description": "Confirmation dialog."
+  },
+  "optionalListDisabledPrompt": {
+    "message": "List disabled. Update filter lists now to apply?",
+    "description": "Confirmation dialog."
+  },
+  "watchingProgress": {
+    "message": "Seen on $count$ site(s) — $progress$/$threshold$ toward review",
+    "description": "Watching entry metadata.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "2"
+      },
+      "progress": {
+        "content": "$2",
+        "example": "2"
+      },
+      "threshold": {
+        "content": "$3",
+        "example": "3"
+      }
+    }
+  },
+  "watchingReady": {
+    "message": "Seen on $count$ site(s) before blocking",
+    "description": "Watching entry metadata.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "watchingReadyForReview": {
+    "message": "Seen on $count$ site(s) — ready for review",
+    "description": "Watching entry metadata.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "learnedSeenOnSites": {
+    "message": "Seen on $count$ site(s) before blocking",
+    "description": "Learned tracker metadata.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "observedCountMeta": {
+    "message": "$count$ tracker(s)",
+    "description": "Observed tracker count label.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "5"
+      }
+    }
+  },
+  "observedItemMeta": {
+    "message": "$total$ blocked on $sites$ site(s) · last $date$",
+    "description": "Observed tracker item metadata.",
+    "placeholders": {
+      "total": {
+        "content": "$1",
+        "example": "12"
+      },
+      "sites": {
+        "content": "$2",
+        "example": "3"
+      },
+      "date": {
+        "content": "$3",
+        "example": "Jan 1"
+      }
+    }
+  },
+  "zappedAddedAt": {
+    "message": "Added $date$",
+    "description": "Zapped element metadata.",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Jan 1, 2024"
+      }
+    }
+  },
+  "onboardingTitle": {
+    "message": "Welcome to QuietBrowse",
+    "description": "Onboarding page title."
+  },
+  "onboardingLead": {
+    "message": "Your privacy shield is active. Here's what QuietBrowse does for you.",
+    "description": "Onboarding lead text."
+  },
+  "featBlocksAdsTitle": {
+    "message": "Blocks ads & trackers",
+    "description": "Feature title."
+  },
+  "featBlocksAdsDesc": {
+    "message": "Full EasyList coverage stops ads, trackers, and annoyances. The toolbar badge shows how many requests were blocked on each page.",
+    "description": "Feature description."
+  },
+  "featLearnsTitle": {
+    "message": "Learns new trackers",
+    "description": "Feature title."
+  },
+  "featLearnsDesc": {
+    "message": "Like Privacy Badger, QuietBrowse watches third-party domains. If something follows you across sites, it gets flagged for review — or blocked automatically if you turn on auto-block in Settings.",
+    "description": "Feature description."
+  },
+  "featPasswordTitle": {
+    "message": "Password shield",
+    "description": "Feature title."
+  },
+  "featPasswordDesc": {
+    "message": "Copying from a password field puts random junk on your clipboard instead. Scripts that secretly reveal passwords get re-masked.",
+    "description": "Feature description."
+  },
+  "featPhishingTitle": {
+    "message": "Phishing warnings",
+    "description": "Feature title."
+  },
+  "featPhishingDesc": {
+    "message": "Lookalike domains, risky addresses, and unencrypted login pages trigger warnings. The popup shows a trust score for each site.",
+    "description": "Feature description."
+  },
+  "featZapperTitle": {
+    "message": "Element zapper",
+    "description": "Feature title."
+  },
+  "featZapperDesc": {
+    "message": "Right-click any page and choose Zap element on this page, or use the button in the popup, to permanently hide annoyances.",
+    "description": "Feature description."
+  },
+  "featSettingsTitle": {
+    "message": "Settings & stats",
+    "description": "Feature title."
+  },
+  "featSettingsDesc": {
+    "message": "Open Settings from the popup to manage your whitelist, learned trackers, zapped elements, and view blocking stats over time.",
+    "description": "Feature description."
+  },
+  "quickTipsTitle": {
+    "message": "Quick tips",
+    "description": "Onboarding section title."
+  },
+  "tipShield": {
+    "message": "Click the big shield in the popup to turn protection on or off globally.",
+    "description": "Onboarding tip."
+  },
+  "tipFixSite": {
+    "message": "If a site breaks, click Fix this site in the popup, then reload.",
+    "description": "Onboarding tip."
+  },
+  "tipPin": {
+    "message": "Pin QuietBrowse from the puzzle-piece menu for quick access.",
+    "description": "Onboarding tip."
+  },
+  "tipPrivacy": {
+    "message": "No data leaves your device — see our Privacy Policy.",
+    "description": "Onboarding tip."
+  },
+  "openSettingsBtn": {
+    "message": "Open Settings",
+    "description": "Button label."
+  },
+  "startBrowsingBtn": {
+    "message": "Start browsing",
+    "description": "Button label."
+  },
+  "zapCommandDescription": {
+    "message": "Start the element zapper on the current page",
+    "description": "Keyboard shortcut description."
+  },
+  "autoBlockLabel": {
+    "message": "Auto-block learned trackers (block review candidates automatically instead of waiting for your approval)",
+    "description": "Toggle label on the Observed trackers tab."
+  },
+  "notifyDangerousDownloadTitle": {
+    "message": "Blocked a dangerous download",
+    "description": "System notification title for a double-extension download."
+  },
+  "notifyDangerousDownloadMsg": {
+    "message": "\"$filename$\" pretends to be a document but is actually a program. QuietBrowse cancelled it.",
+    "description": "System notification body for a double-extension download.",
+    "placeholders": {
+      "filename": { "content": "$1", "example": "invoice.pdf.exe" }
+    }
+  },
+  "notifyRiskyDownloadTitle": {
+    "message": "Careful with this download",
+    "description": "System notification title for an executable download."
+  },
+  "notifyRiskyDownloadMsg": {
+    "message": "\"$filename$\" is a program that can run on your PC. Only open it if you trust where it came from.",
+    "description": "System notification body for an executable download.",
+    "placeholders": {
+      "filename": { "content": "$1", "example": "setup.exe" }
+    }
+  },
+  "notifyCantZapTitle": {
+    "message": "Can't zap on this page",
+    "description": "System notification title when the zapper cannot be injected."
+  },
+  "notifyCantZapMsg": {
+    "message": "QuietBrowse can't run on this type of page (browser settings, extensions, etc.).",
+    "description": "System notification body when the zapper cannot be injected."
+  },
+  "alertImportResult": {
+    "message": "Imported $added$ new, $replaced$ updated, $skipped$ skipped.",
+    "description": "Alert after a successful custom-rules import.",
+    "placeholders": {
+      "added":    { "content": "$1", "example": "3" },
+      "replaced": { "content": "$2", "example": "1" },
+      "skipped":  { "content": "$3", "example": "0" }
+    }
+  },
+  "alertBackupRestored": {
+    "message": "Backup restored. Reloading settings…",
+    "description": "Alert after a successful full-data restore."
+  },
+  "alertRestoreFailed": {
+    "message": "Restore failed: $error$",
+    "description": "Alert when a full-data restore fails.",
+    "placeholders": {
+      "error": { "content": "$1", "example": "unknown error" }
+    }
+  },
+  "alertInvalidBackupFile": {
+    "message": "Invalid backup file: $error$",
+    "description": "Alert when the selected backup file cannot be parsed.",
+    "placeholders": {
+      "error": { "content": "$1", "example": "Unexpected token" }
+    }
+  },
+  "alertNothingToUndo": {
+    "message": "Nothing to undo",
+    "description": "Alert when the undo queue is empty."
+  },
+  "alertUpdateListFailed": {
+    "message": "Failed to update list",
+    "description": "Alert when an optional filter-list toggle fails to apply."
+  },
+  "alertAutoBlockFailed": {
+    "message": "Could not enable auto-blocking",
+    "description": "Alert when enabling auto-block learned trackers fails."
+  }
+}

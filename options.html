@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title data-i18n="optionsTitle">QuietBrowse Settings</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <header class="page-header">
+    <div class="logo">🌊</div>
+    <div>
+      <h1 data-i18n="optionsHeaderTitle">QuietBrowse Settings</h1>
+      <p class="subtitle" data-i18n="optionsHeaderSubtitle">Manage site rules, trackers, custom rules, zapped elements, and stats</p>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="stats" data-i18n="tabStats">Statistics</button>
+    <button class="tab" data-tab="filters" data-i18n="tabFilters">Filter lists</button>
+    <button class="tab" data-tab="whitelist" data-i18n="tabSiteRules">Site rules</button>
+    <button class="tab" data-tab="observed" data-i18n="tabObserved">Observed trackers</button>
+    <button class="tab" data-tab="custom" data-i18n="tabCustom">Custom rules</button>
+    <button class="tab" data-tab="learned" data-i18n="tabLearned">Learned Trackers</button>
+    <button class="tab" data-tab="zapped" data-i18n="tabZapped">Zapped Elements</button>
+    <button class="tab" data-tab="reports" data-i18n="tabReports">Site reports</button>
+    <button class="tab" data-tab="credits" data-i18n="tabCredits">Licenses</button>
+  </nav>
+
+  <main>
+    <section id="panel-stats" class="panel active">
+      <div class="summary-cards">
+        <div class="card">
+          <div id="statTotal" class="card-num">0</div>
+          <div class="card-label" data-i18n="statTotalBlocked">Total blocked</div>
+        </div>
+        <div class="card">
+          <div id="statToday" class="card-num">0</div>
+          <div class="card-label" data-i18n="statBlockedToday">Blocked today</div>
+        </div>
+        <div class="card">
+          <div id="statLearned" class="card-num">0</div>
+          <div class="card-label" data-i18n="statLearnedTrackers">Learned trackers</div>
+        </div>
+      </div>
+      <h2 data-i18n="chartTitle">Blocked per day (last 30 days)</h2>
+      <div class="chart-wrap">
+        <canvas id="statsChart" width="720" height="220"></canvas>
+      </div>
+      <p class="note" data-i18n="chartNote">Block counts are estimated from network blocks on your device. The toolbar badge is maintained by Chrome's declarativeNetRequest API. Nothing is sent to a server.</p>
+
+      <h2 data-i18n="filterListsHeading">Filter lists</h2>
+      <p class="desc">
+        EasyList and EasyPrivacy refresh automatically.
+        Manage optional lists on the <button type="button" class="linkish" data-tab="filters" data-i18n="tabFilters">Filter lists</button> tab.
+        <span id="filterStatusStats"></span>
+      </p>
+      <button id="updateFiltersBtnStats" class="btn-sm" data-i18n="updateNowBtn">Update now</button>
+
+      <h2 style="margin-top:24px" data-i18n="protectionHeading">Protection</h2>
+      <p class="desc" data-i18n="protectionDesc">Global shields and privacy signals. Per-site mode stays in the toolbar popup.</p>
+      <label class="toggle-row-options">
+        <span data-i18n="popupPrivacySignals">Do Not Track + GPC signals</span>
+        <input type="checkbox" id="privacyToggle" checked />
+      </label>
+      <label class="toggle-row-options">
+        <span data-i18n="popupCookiePopups">Handle cookie pop-ups (reject when possible, then hide)</span>
+        <input type="checkbox" id="cookieToggle" checked />
+      </label>
+      <label class="toggle-row-options">
+        <span data-i18n="popupPasswordShield">Password shield</span>
+        <input type="checkbox" id="shieldToggle" checked />
+      </label>
+      <label class="toggle-row-options">
+        <span data-i18n="popupPhishingWarnings">Phishing warnings</span>
+        <input type="checkbox" id="phishToggle" checked />
+      </label>
+      <label class="toggle-row-options">
+        <span data-i18n="popupDownloadGuard">Download guard</span>
+        <input type="checkbox" id="downloadToggle" />
+      </label>
+
+      <h2 style="margin-top:24px" data-i18n="scriptletsHeading">Scriptlets</h2>
+      <p class="desc" data-i18n="scriptletsDesc">Extra page-level protections that network blocking alone cannot provide.</p>
+      <label class="toggle-row-options">
+        <span data-i18n="scriptletCatalogLabel">Scriptlet catalog (site-keyed abort-on-property-read / set-constant)</span>
+        <input type="checkbox" id="scriptletCatalogToggle" checked />
+      </label>
+      <label class="toggle-row-options">
+        <span data-i18n="antiAdblockLabel">Anti-adblock bait (opt-in; helps pages that refuse to load when they detect blockers)</span>
+        <input type="checkbox" id="antiAdblockToggle" />
+      </label>
+      <label class="toggle-row-options">
+        <span data-i18n="cnameUncloakLabel">CNAME uncloaking (block known first-party tracker aliases)</span>
+        <input type="checkbox" id="cnameToggle" checked />
+      </label>
+
+      <h2 style="margin-top:24px" data-i18n="backupRestoreHeading">Backup &amp; restore</h2>
+      <p class="desc">Small toggles (protection, cookie handling, shields, scriptlets, CNAME, optional lists) sync across signed-in Chrome profiles via <code>chrome.storage.sync</code>. Site rules, learned trackers, and stats stay local-only.</p>
+      <p class="desc" data-i18n="backupRestoreDesc">Export all QuietBrowse data (site rules, learned trackers, observed trackers, custom rules, custom filter lists, zapped elements, and stats) as JSON, or restore from a previous export.</p>
+      <div class="inline-form">
+        <button id="undoLastBtn" class="btn-sm" type="button" disabled>Undo last change</button>
+        <button id="exportAllBtn" class="btn-sm" type="button" data-i18n="exportAllBtn">Export all data</button>
+        <button id="importAllBtn" class="btn-sm" type="button" data-i18n="restoreAllBtn">Restore from backup…</button>
+        <input id="importAllFile" type="file" accept="application/json,.json" hidden />
+      </div>
+      <p class="desc" style="margin-top:20px" data-i18n="attributionText">
+        Filter lists from
+        <a href="https://easylist.to/" target="_blank" rel="noopener">EasyList</a> /
+        <a href="https://easylist.to/easylist/easyprivacy.php" target="_blank" rel="noopener">EasyPrivacy</a>
+        (CC BY-SA 3.0 / GPL-3.0). See the Licenses tab.
+      </p>
+    </section>
+
+    <section id="panel-filters" class="panel">
+      <h2 data-i18n="filtersTabHeading">Filter lists</h2>
+      <p class="desc" data-i18n="filtersTabDesc">
+        EasyList and EasyPrivacy are always enabled and refresh automatically every 24 hours.
+        Optional lists and custom URLs are merged on update (Chrome caps dynamic rules at ~30k).
+        <span id="filterStatus"></span>
+      </p>
+      <button id="updateFiltersBtn" class="btn-sm" data-i18n="updateNowBtn">Update now</button>
+      <div id="dnrBudget" class="budget-box"></div>
+
+      <h3 style="margin-top:24px" data-i18n="alwaysOnHeading">Always on</h3>
+      <ul id="defaultFilterList" class="item-list"></ul>
+
+      <h3 style="margin-top:24px" data-i18n="optionalListsHeading">Optional lists</h3>
+      <p class="desc" data-i18n="optionalListsNote">Fanboy Annoyance already includes Cookie + Social — prefer one or the other.</p>
+      <ul id="optionalFilterList" class="item-list"></ul>
+
+      <h3 style="margin-top:24px" data-i18n="customListsHeading">Custom lists</h3>
+      <form id="customFilterForm" class="inline-form">
+        <input id="customFilterUrl" type="text" data-i18n-placeholder="customListUrlPlaceholder" placeholder="https://easylist.to/easylistgermany/easylistgermany.txt" autocomplete="off" required />
+        <input id="customFilterTitle" type="text" data-i18n-placeholder="customListTitlePlaceholder" placeholder="Title (optional)" autocomplete="off" />
+        <button type="submit" data-i18n="addListBtn">Add list</button>
+      </form>
+      <p id="customFilterError" class="form-error"></p>
+      <ul id="customFilterList" class="item-list"></ul>
+      <p id="customFilterEmpty" class="empty" data-i18n="noCustomLists">No custom filter lists added.</p>
+    </section>
+
+    <section id="panel-whitelist" class="panel">
+      <h2 data-i18n="siteRulesHeading">Site rules</h2>
+      <p class="desc" data-i18n="siteRulesDesc">
+        Override protection for specific domains. <strong>Allow ads</strong> keeps blocking trackers and analytics;
+        <strong>Pause</strong> disables all blocking on that site.
+      </p>
+      <form id="whitelistForm" class="inline-form">
+        <input id="whitelistInput" type="text" data-i18n-placeholder="siteRulesDomainPlaceholder" placeholder="example.com" autocomplete="off" />
+        <select id="whitelistMode" class="mode-select">
+          <option value="ads" data-i18n="siteRulesModeAllowAds">Allow ads</option>
+          <option value="off" data-i18n="siteRulesModePause">Pause</option>
+        </select>
+        <button type="submit" data-i18n="addSiteRuleBtn">Add rule</button>
+      </form>
+      <ul id="whitelistList" class="item-list"></ul>
+      <p id="whitelistEmpty" class="empty" data-i18n="noSiteRules">No custom site rules — all sites use full protection.</p>
+    </section>
+
+    <section id="panel-observed" class="panel">
+      <h2 data-i18n="observedHeading">Observed trackers</h2>
+      <p class="desc" data-i18n="observedDesc">
+        Trackers QuietBrowse has blocked while you browse.
+        Domains still being <strong>watched</strong> (not yet auto-blocked) appear below.
+      </p>
+
+      <h3 class="subhead" data-i18n="watchingHeading">Watching (not blocked yet)</h3>
+      <p class="desc" data-i18n="watchingDesc">Third-party domains seen with cookies across sites. After 3 sites they are flagged for review below — or blocked automatically if you enable auto-block.</p>
+      <label class="toggle-row-options">
+        <span data-i18n="autoBlockLabel">Auto-block learned trackers (block review candidates automatically instead of waiting for your approval)</span>
+        <input type="checkbox" id="autoBlockToggle" />
+      </label>
+      <ul id="watchingList" class="item-list"></ul>
+      <p id="watchingEmpty" class="empty" data-i18n="noWatching">No trackers being watched yet.</p>
+
+      <h3 class="subhead" data-i18n="blockedHistoryHeading">Blocked history</h3>
+      <div class="inline-form">
+        <input id="observedFilter" type="text" data-i18n-placeholder="observedFilterPlaceholder" placeholder="Search trackers or domains…" autocomplete="off" />
+        <select id="observedSort" class="mode-select">
+          <option value="lastSeen" data-i18n="sortLastSeen">Last seen</option>
+          <option value="totalCount" data-i18n="sortMostBlocked">Most blocked</option>
+          <option value="siteCount" data-i18n="sortMostSites">Most sites</option>
+          <option value="name" data-i18n="sortName">Name</option>
+        </select>
+      </div>
+      <div class="observed-header">
+        <span id="observedCount"></span>
+        <button id="clearObservedBtn" class="btn-sm danger" data-i18n="clearHistoryBtn">Clear history</button>
+      </div>
+      <ul id="observedList" class="item-list"></ul>
+      <p id="observedEmpty" class="empty" data-i18n="noObserved">No observed trackers yet — keep browsing and QuietBrowse will build this list.</p>
+    </section>
+
+    <section id="panel-custom" class="panel">
+      <h2 data-i18n="customRulesHeading">Custom rules</h2>
+      <p class="desc" data-i18n="customRulesDesc">Add your own block or allow rules for specific domains or URL fragments.</p>
+      <form id="customRuleForm" class="custom-rule-form">
+        <div class="form-row">
+          <input id="customRuleName" type="text" data-i18n-placeholder="customRuleNamePlaceholder" placeholder="Name (optional)" autocomplete="off" />
+        </div>
+        <div class="form-row trio">
+          <select id="customRuleAction">
+            <option value="block" data-i18n="customRuleActionBlock">Block</option>
+            <option value="allow" data-i18n="customRuleActionAllow">Allow</option>
+          </select>
+          <select id="customRuleType">
+            <option value="domain" data-i18n="customRuleTypeDomain">domain</option>
+            <option value="urlContains" data-i18n="customRuleTypeUrl">URL contains</option>
+          </select>
+          <select id="customRuleScope">
+            <option value="all" data-i18n="customRuleScopeAll">all requests</option>
+            <option value="thirdParty" data-i18n="customRuleScopeThirdParty">third-party only</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <input id="customRuleValue" type="text" data-i18n-placeholder="customRuleValuePlaceholder" placeholder="example.com or /tracker.js" autocomplete="off" required />
+        </div>
+        <div class="form-row actions">
+          <label class="toggle-inline">
+            <input type="checkbox" id="customRuleEnabled" checked />
+            <span data-i18n="customRuleEnabledLabel">Enabled</span>
+          </label>
+          <button type="submit" data-i18n="addSiteRuleBtn">Add rule</button>
+        </div>
+        <p id="customRuleError" class="form-error"></p>
+      </form>
+
+      <div class="custom-io">
+        <button id="exportCustomRulesBtn" class="btn-sm" data-i18n="exportRulesBtn">Export rules</button>
+        <button id="importCustomRulesBtn" class="btn-sm" data-i18n="importRulesBtn">Import rules…</button>
+        <input id="importCustomRulesFile" type="file" accept="application/json,.json" hidden />
+      </div>
+
+      <ul id="customRuleList" class="item-list"></ul>
+      <p id="customRuleEmpty" class="empty" data-i18n="noCustomRules">No custom rules yet.</p>
+    </section>
+
+    <section id="panel-learned" class="panel">
+      <h2 data-i18n="learnedHeading">Learned trackers</h2>
+      <p class="desc" data-i18n="learnedDesc">Domains QuietBrowse auto-blocked after seeing them track you across multiple sites. Unblock if something breaks.</p>
+      <ul id="learnedList" class="item-list"></ul>
+      <p id="learnedEmpty" class="empty" data-i18n="noLearned">No learned trackers yet — keep browsing and QuietBrowse will learn.</p>
+    </section>
+
+    <section id="panel-zapped" class="panel">
+      <h2 data-i18n="zappedHeading">Zapped Elements</h2>
+      <p class="desc" data-i18n="zappedDesc">Elements you manually hid with the zapper (right-click a page → “Zap element”, or use the popup button).</p>
+      <div id="zappedGroups"></div>
+      <p id="zappedEmpty" class="empty" data-i18n="noZapped">No zapped elements yet.</p>
+    </section>
+
+    <section id="panel-reports" class="panel">
+      <h2 data-i18n="reportsHeading">Site breakage reports</h2>
+      <p class="desc" data-i18n="reportsDesc">
+        Saved locally when you click <strong>Fix this site</strong> in the popup.
+        Nothing is uploaded automatically — export and share if you want to help improve the extension.
+      </p>
+      <div class="inline-form">
+        <button id="exportReportsBtn" class="btn-sm" type="button" data-i18n="exportReportsBtn">Export JSON</button>
+        <button id="clearReportsBtn" class="btn-sm danger" type="button" data-i18n="clearReportsBtn">Clear all</button>
+      </div>
+      <ul id="reportsList" class="item-list"></ul>
+      <p id="reportsEmpty" class="empty" data-i18n="noReports">No reports yet.</p>
+    </section>
+
+    <section id="panel-credits" class="panel">
+      <h2 data-i18n="licensesHeading">Licenses &amp; attribution</h2>
+      <p class="desc" data-i18n="licensesDesc">
+        QuietBrowse original code is licensed under
+        <a href="LICENSE" target="_blank" rel="noopener">GPL-3.0</a>.
+        Compiled network and cosmetic rules are derivative works of EasyList and EasyPrivacy.
+      </p>
+      <ul class="credits-list">
+        <li>
+          <strong>EasyList</strong> — https://easylist.to/easylist/easylist.txt<br />
+          © EasyList authors · CC BY-SA 3.0 and GPL-3.0
+        </li>
+        <li>
+          <strong>EasyPrivacy</strong> — https://easylist.to/easylist/easyprivacy.txt<br />
+          © EasyList authors · CC BY-SA 3.0 and GPL-3.0
+        </li>
+      </ul>
+      <p class="desc">
+        Full licence text is in the project repository (<code>ATTRIBUTION.md</code>, <code>LICENSE</code>).
+        Include EasyList attribution in any Chrome Web Store listing (see <code>STORE_LISTING.md</code>).
+      </p>
+    </section>
+  </main>
+
+  <script src="i18n_dom.js"></script>
+  <script src="utils.js"></script>
+  <script src="trackers.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

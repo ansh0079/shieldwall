@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <img id="favicon" class="favicon" src="" alt="" hidden />
+    <div class="header-text">
+      <div id="site" class="site">…</div>
+      <div id="trustRow" class="trust-row" hidden>
+        <span id="trustScore" class="trust-score">—</span>
+        <span id="trustLabel" class="trust-label" data-i18n="popupTrustScoreLabel">Trust score</span>
+      </div>
+    </div>
+    <button id="shieldBtn" class="shield-btn" type="button" title="Toggle protection">
+      <span class="shield-icon">🌊</span>
+    </button>
+  </header>
+
+  <section class="stats">
+    <div class="stat">
+      <div id="pageCount" class="stat-num">0</div>
+      <div class="stat-label" data-i18n="popupBlockedOnPage">blocked on page</div>
+    </div>
+    <div class="stat">
+      <div id="totalCount" class="stat-num">0</div>
+      <div class="stat-label" data-i18n="popupBlockedTotal">blocked total</div>
+    </div>
+  </section>
+
+  <section id="trackerList" class="tracker-list">
+    <div class="empty" data-i18n="popupNoTrackersYet">No trackers blocked on this page yet.</div>
+  </section>
+
+  <section class="diagnostics">
+    <div class="diagnostics-title">Likely reason</div>
+    <div id="diagnosticsList" class="diagnostics-list">
+      <div class="empty">No block details yet.</div>
+    </div>
+  </section>
+
+  <section class="fix-site">
+    <button id="fixSiteBtn" class="fix-site-btn" type="button" disabled data-i18n="popupFixSiteBtn">
+      Fix this site
+    </button>
+    <label class="report-check">
+      <input type="checkbox" id="reportCheck" checked />
+      <span data-i18n="popupSaveLocalReport">Save local report</span>
+    </label>
+    <p class="fix-site-hint" data-i18n="popupFixSiteHint">Pauses blocking on this site instantly. Reload the page after.</p>
+  </section>
+
+  <section class="quick-actions">
+    <button id="zapBtn" class="action-btn" type="button" data-i18n="popupZapBtn">Zap element</button>
+    <a id="optionsLink" class="action-link" href="#" target="_blank" data-i18n="popupSettingsLink">Settings</a>
+  </section>
+
+  <section class="toggles">
+    <label class="site-mode-row" id="siteRow">
+      <span data-i18n="popupProtectionOnSite">Protection on this site</span>
+      <select id="siteMode" class="site-mode-select">
+        <option value="full" data-i18n="popupModeFull">Full protection</option>
+        <option value="ads" data-i18n="popupModeAds">Allow ads</option>
+        <option value="off" data-i18n="popupModeOff">Pause</option>
+      </select>
+    </label>
+  </section>
+
+  <footer>
+    <span id="learned"></span>
+    <span id="hint"></span>
+  </footer>
+
+  <script src="i18n_dom.js"></script>
+  <script src="utils.js"></script>
+  <script src="trackers.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

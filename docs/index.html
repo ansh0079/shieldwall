@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QuietBrowse — privacy-first ad & tracker blocking</title>
+  <meta name="description" content="QuietBrowse blocks ads and trackers locally on your device. No accounts, no telemetry, no cloud." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0a2430;
+      --foam: #e8f4f7;
+      --sea: #0e7490;
+      --sea-deep: #0b4f63;
+      --mist: #9fd3e0;
+      --sand: #d9e8ec;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "Manrope", sans-serif;
+      color: var(--ink);
+      background: var(--foam);
+      line-height: 1.5;
+    }
+    .hero {
+      min-height: 100vh;
+      display: grid;
+      align-content: end;
+      padding: clamp(24px, 5vw, 64px);
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse 80% 60% at 70% 20%, rgba(159, 211, 224, 0.55), transparent 55%),
+        linear-gradient(165deg, #0b4f63 0%, #0e7490 42%, #147a8f 70%, #1a8fa3 100%);
+      color: #f4fbfd;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40' viewBox='0 0 120 40'%3E%3Cpath fill='none' stroke='rgba(255,255,255,0.08)' stroke-width='1.5' d='M0 20 Q30 0 60 20 T120 20'/%3E%3C/svg%3E")
+        repeat-x bottom / 240px 48px;
+      opacity: 0.9;
+      pointer-events: none;
+      animation: wave 14s linear infinite;
+    }
+    @keyframes wave {
+      from { background-position: 0 bottom; }
+      to { background-position: 240px bottom; }
+    }
+    .brand {
+      font-family: "Fraunces", serif;
+      font-size: clamp(3rem, 9vw, 5.5rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 0.95;
+      margin-bottom: 18px;
+      animation: rise 0.9s ease both;
+    }
+    .tag {
+      max-width: 28rem;
+      font-size: clamp(1.05rem, 2.2vw, 1.25rem);
+      font-weight: 500;
+      opacity: 0.92;
+      margin-bottom: 28px;
+      animation: rise 0.9s ease 0.12s both;
+    }
+    .cta {
+      display: inline-flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      animation: rise 0.9s ease 0.22s both;
+    }
+    .cta a {
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 12px 20px;
+      border-radius: 999px;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    .cta a:hover { transform: translateY(-2px); }
+    .cta .primary {
+      background: #f4fbfd;
+      color: var(--sea-deep);
+    }
+    .cta .ghost {
+      border: 1.5px solid rgba(244, 251, 253, 0.55);
+      color: #f4fbfd;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: none; }
+    }
+    section {
+      padding: clamp(48px, 8vw, 96px) clamp(24px, 5vw, 64px);
+      max-width: 920px;
+      margin: 0 auto;
+    }
+    h2 {
+      font-family: "Fraunces", serif;
+      font-size: clamp(1.75rem, 3vw, 2.25rem);
+      margin-bottom: 12px;
+    }
+    section p {
+      color: #2a4a56;
+      max-width: 38rem;
+      margin-bottom: 12px;
+    }
+    .features {
+      display: grid;
+      gap: 28px;
+      margin-top: 28px;
+    }
+    @media (min-width: 720px) {
+      .features { grid-template-columns: 1fr 1fr; }
+    }
+    .features h3 {
+      font-size: 1.05rem;
+      margin-bottom: 6px;
+      color: var(--sea-deep);
+    }
+    footer {
+      padding: 32px clamp(24px, 5vw, 64px) 48px;
+      border-top: 1px solid var(--sand);
+      font-size: 0.9rem;
+      color: #4a6670;
+    }
+    footer a { color: var(--sea); }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="brand">QuietBrowse</div>
+    <p class="tag">Ads and trackers stop on your device — not in someone else’s cloud.</p>
+    <div class="cta">
+      <a class="primary" href="#install">Get the extension</a>
+      <a class="ghost" href="../privacy.html">Privacy</a>
+    </div>
+  </header>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p><strong>Chrome / Edge / Brave</strong> — clone this repository, open <code>chrome://extensions</code>, enable Developer mode, and choose <strong>Load unpacked</strong> with the project folder. A Chrome Web Store build will be linked here when published.</p>
+    <p><strong>Firefox</strong> — run <code>npm run build:xpi</code>, then install the generated <code>.xpi</code> from <code>about:debugging</code>.</p>
+  </section>
+
+  <section>
+    <h2>What you get</h2>
+    <p>A privacy-first blocker that explains what it does — learning, trust score, Fix this site — with blocking quality close enough that you don’t leave for something heavier.</p>
+    <div class="features">
+      <div>
+        <h3>Local-only by design</h3>
+        <p>No accounts, analytics, or developer servers. Settings and stats stay on your machine.</p>
+      </div>
+      <div>
+        <h3>Real filter lists</h3>
+        <p>EasyList and EasyPrivacy with optional Fanboy and regional lists, updated on your schedule.</p>
+      </div>
+      <div>
+        <h3>Breakage escape hatch</h3>
+        <p>Pause a site instantly, zap leftover elements, and keep a local report if something broke.</p>
+      </div>
+      <div>
+        <h3>Open source</h3>
+        <p>GPL-3.0 code. EasyList attribution. Auditable. Yours to fork.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    QuietBrowse · GPL-3.0 · Filter lists © EasyList authors (CC BY-SA 3.0 / GPL-3.0).
+    See <a href="../ATTRIBUTION.md">ATTRIBUTION.md</a> and <a href="../LICENSE">LICENSE</a>.
+  </footer>
+</body>
+</html>

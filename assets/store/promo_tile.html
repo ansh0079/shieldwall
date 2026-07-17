@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>QuietBrowse — Promo Tile (440×280)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 440px; height: 280px; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: linear-gradient(145deg, #1a2b4a 0%, #0f1e3a 60%, #0a1628 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    padding: 32px 36px;
+    position: relative;
+  }
+
+  /* decorative wave rings */
+  .rings {
+    position: absolute;
+    right: -30px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 260px;
+    height: 260px;
+    pointer-events: none;
+  }
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.08);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .ring:nth-child(1) { width: 80px; height: 80px; border-color: rgba(255,255,255,0.2); }
+  .ring:nth-child(2) { width: 130px; height: 130px; }
+  .ring:nth-child(3) { width: 185px; height: 185px; }
+  .ring:nth-child(4) { width: 240px; height: 240px; }
+
+  /* logo circle */
+  .logo {
+    position: absolute;
+    right: 74px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 56px;
+    height: 56px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+  }
+
+  .left { flex: 1; padding-right: 130px; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #a5c8ff;
+    margin-bottom: 14px;
+  }
+  .badge-dot { width: 6px; height: 6px; background: #4ade80; border-radius: 50%; }
+
+  h1 {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+    margin-bottom: 10px;
+  }
+  h1 span { color: #60a5fa; }
+
+  .tagline {
+    font-size: 13px;
+    color: rgba(255,255,255,0.65);
+    line-height: 1.5;
+    margin-bottom: 18px;
+    max-width: 220px;
+  }
+
+  .pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.75);
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="badge"><span class="badge-dot"></span> Privacy-first · No data collected</div>
+    <h1>Quiet<span>Browse</span></h1>
+    <p class="tagline">Blocks ads & trackers locally. Learns new threats. Protects passwords.</p>
+    <div class="pills">
+      <span class="pill">🚫 Ad blocking</span>
+      <span class="pill">🧠 Tracker learning</span>
+      <span class="pill">🔒 Password shield</span>
+      <span class="pill">⚠️ Phishing warnings</span>
+    </div>
+  </div>
+
+  <div class="rings">
+    <div class="ring"></div>
+    <div class="ring"></div>
+    <div class="ring"></div>
+    <div class="ring"></div>
+  </div>
+  <div class="logo">🌊</div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+node_modules/
+tools/ext_cache/
+compare_report.html
+quietbrowse*.zip
+quietbrowse*.xpi
+*.log
+.DS_Store
+Thumbs.db
+_metadata/
+package-lock.json
