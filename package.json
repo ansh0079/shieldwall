@@ -1,6 +1,6 @@
 {
   "name": "quietbrowse",
-  "version": "4.6.2",
+  "version": "4.6.4",
   "private": true,
   "description": "Privacy-first ad and tracker blocker (Chrome / Edge / Brave / Firefox)",
   "license": "GPL-3.0",
@@ -12,6 +12,7 @@
     "build:filters": "node tools/build_filters.js",
     "build:psl": "node tools/build_psl.js",
     "compare": "node tools/compare.js",
+    "metrics": "node tools/listing_metrics.js",
     "build:xpi": "node tools/pack.firefox.js",
     "release:check": "node tools/release_check.js"
   },

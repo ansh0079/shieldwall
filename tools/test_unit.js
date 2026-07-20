@@ -129,6 +129,28 @@ console.log("compact getBaseDomain (no PSL)");
   });
 }
 
+console.log("trusted enterprise suffixes");
+{
+  const ctx = loadScripts(["psl_data.js", "utils.js", "phish_score.js"]);
+  const PhishScore = ctx.PhishScore;
+  const trustedHosts = [
+    "outlook.cloud.microsoft",
+    "contoso.onmicrosoft.com",
+    "contoso.sharepoint.com",
+    "cdn.office.net",
+    "login.microsoftonline.com",
+    "storage.googleapis.com",
+    "lh3.googleusercontent.com"
+  ];
+  for (const host of trustedHosts) {
+    test("trusted: " + host, () => {
+      const r = PhishScore.analyze(host, "https:", false);
+      assert(r.level === "excellent", host + " expected excellent, got " + r.level);
+      assert(r.trustScore >= 90, host + " trust score");
+    });
+  }
+}
+
 console.log("custom rules");
 {
   const dnrUpdates = [];

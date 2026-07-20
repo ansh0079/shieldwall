@@ -1231,8 +1231,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   await syncCnameRules();
   ensureUpdateAlarm();
 
-  // Set a real uninstall URL only after you host a public page (see STORE_LISTING.md).
-  // Leaving the placeholder would send users to a dead example.com domain.
+  chrome.runtime.setUninstallURL("https://ansh0079.github.io/shieldwall/?uninstalled=1");
 
   if (details.reason === "install") {
     chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") });

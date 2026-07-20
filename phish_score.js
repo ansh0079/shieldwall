@@ -29,10 +29,12 @@ const PhishScore = (function () {
   ];
 
   const SAFE_SUFFIXES = [
-    "microsoftonline.com", "googleusercontent.com", "googleapis.com",
+    "microsoftonline.com", "onmicrosoft.com", "cloud.microsoft",
+    "googleusercontent.com", "googleapis.com",
     "gstatic.com", "amazonaws.com", "cloudfront.net", "facebook.net",
     "fbcdn.net", "azurewebsites.net", "windows.net", "apple.news",
-    "googlevideo.com", "ggpht.com", "microsoft.us"
+    "googlevideo.com", "ggpht.com", "microsoft.us", "sharepoint.com",
+    "office.net"
   ];
 
   const RISKY_TLDS = new Set([

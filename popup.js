@@ -233,7 +233,8 @@ function renderTrackers(trackers) {
 function renderDiagnostics(items) {
   if (!diagnosticsListEl) return;
   if (!items || items.length === 0) {
-    diagnosticsListEl.innerHTML = '<div class="empty">No block details yet.</div>';
+    diagnosticsListEl.innerHTML =
+      '<div class="empty">' + i18n("popupDiagnosticsEmpty") + "</div>";
     return;
   }
   diagnosticsListEl.innerHTML = "";

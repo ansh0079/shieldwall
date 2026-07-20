@@ -2,6 +2,22 @@
 
 All notable changes to QuietBrowse are documented here.
 
+## [4.6.4] — 2026-07-20
+
+### Changed
+- **Onboarding** — learning copy is review-first (not auto-block by default); added a **Fix broken sites** feature card.
+- **Popup** — block diagnostics collapsed behind a disclosure so Fix this site / site mode stay primary.
+- **Store listing** — rule counts refreshed from the bundled snapshot (`node tools/listing_metrics.js`); privacy/terms copied into `docs/` for GitHub Pages.
+
+### Added
+- Trusted enterprise/CDN suffix regression tests for phishing scoring.
+- Chrome smoke QA step in `npm run release:check`.
+
+## [4.6.3] — 2026-07-20
+
+### Fixed
+- **Phishing false positives** — Microsoft enterprise domains (`outlook.cloud.microsoft`, `*.onmicrosoft.com`, `*.sharepoint.com`, `*.office.net`) were incorrectly flagged as "misspelling of icloud.com / microsoft.com" due to the Levenshtein heuristic matching short SLDs like "cloud" and "onmicrosoft". Added these to the trusted-suffix list so they return "excellent" immediately.
+
 ## [4.6.2] — 2026-07-17
 
 ### Fixed

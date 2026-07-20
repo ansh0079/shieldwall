@@ -387,6 +387,14 @@
     "message": "No trackers blocked on this page yet.",
     "description": "Popup empty state."
   },
+  "popupDiagnosticsTitle": {
+    "message": "Block details",
+    "description": "Collapsible diagnostics section title in popup."
+  },
+  "popupDiagnosticsEmpty": {
+    "message": "No block details yet.",
+    "description": "Empty diagnostics list in popup."
+  },
   "popupFixSiteBtn": {
     "message": "Fix this site",
     "description": "Popup button label."
@@ -848,6 +856,14 @@
   "featLearnsDesc": {
     "message": "Like Privacy Badger, QuietBrowse watches third-party domains. If something follows you across sites, it gets flagged for review — or blocked automatically if you turn on auto-block in Settings.",
     "description": "Feature description."
+  },
+  "featFixSiteTitle": {
+    "message": "Fix broken sites",
+    "description": "Feature title for Fix this site."
+  },
+  "featFixSiteDesc": {
+    "message": "If a page looks wrong, open the popup and click Fix this site, then reload. QuietBrowse pauses blocking on that domain instantly and can save a local report.",
+    "description": "Feature description for Fix this site."
   },
   "featPasswordTitle": {
     "message": "Password shield",

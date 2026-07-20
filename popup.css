@@ -220,19 +220,45 @@ header {
 .diagnostics {
   border-top: 1px solid #eef2f7;
   border-bottom: 1px solid #e5e7eb;
-  padding: 10px 16px;
+  padding: 6px 16px 10px;
+}
+
+.diagnostics details {
+  margin: 0;
 }
 
 .diagnostics-title {
   color: #374151;
   font-size: 12px;
   font-weight: 700;
-  margin-bottom: 6px;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.diagnostics-title::-webkit-details-marker {
+  display: none;
+}
+
+.diagnostics-title::before {
+  content: "▸";
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.diagnostics[open] .diagnostics-title::before,
+details[open] > .diagnostics-title::before {
+  content: "▾";
 }
 
 .diagnostics-list {
   display: grid;
   gap: 6px;
+  margin-top: 6px;
 }
 
 .diagnostic {

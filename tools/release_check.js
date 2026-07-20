@@ -8,6 +8,7 @@
 //   4. Entry counts are in the expected range (no node_modules drift)
 //   5. No banned paths inside the zips (node_modules, _metadata, tools, assets)
 //   6. Firefox manifest has a real gecko.id (not the placeholder)
+//   7. Chrome smoke QA (skipped if Chrome/Edge is not installed)
 
 const fs = require("fs");
 const path = require("path");
@@ -156,6 +157,15 @@ inspectZip(FF_XPI, "Firefox xpi", (m, label) => {
     fail(`${label}: background.scripts missing or empty`);
   }
 });
+
+// ── 6. Chrome smoke (skipped if Chrome/Edge not installed) ───────────────────
+console.log("\n[6] Chrome smoke QA...");
+try {
+  execSync("node tools/qa_chrome.js", { cwd: ROOT, stdio: "inherit" });
+  ok("Chrome smoke passed or skipped (no browser)");
+} catch {
+  fail("Chrome smoke failed");
+}
 
 // ── Result ────────────────────────────────────────────────────────────────────
 console.log("");

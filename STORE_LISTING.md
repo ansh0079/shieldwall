@@ -14,11 +14,21 @@ See [PERMISSIONS.md](PERMISSIONS.md) for full text.
 
 ## Privacy policy URL
 
-Host `privacy.html` publicly (file is in the repo root), e.g.:
+Hosted via GitHub Pages from the `docs/` folder:
 
-`https://YOUR_GITHUB_USER.github.io/quietbrowse/privacy.html`
+`https://ansh0079.github.io/shieldwall/privacy.html`
 
-Also host `terms.html` if your store listing references terms. Enable GitHub Pages from the repo `docs/` folder or copy both HTML files to the Pages root.
+Also list terms if the store asks:
+
+`https://ansh0079.github.io/shieldwall/terms.html`
+
+The same files live at the repo root (`privacy.html`, `terms.html`) for packaging; `docs/` is the public Pages copy.
+
+Regenerate rule-count bullets after filter rebuilds with:
+
+```bash
+node tools/listing_metrics.js
+```
 
 ## Category
 
@@ -42,7 +52,7 @@ QuietBrowse blocks ads and trackers without sending a single byte of your browsi
 
 • Full EasyList + EasyPrivacy coverage — the same community lists used by uBlock Origin, updated automatically every 24 hours so you're always protected against new ad networks.
 
-• 95,000+ blocked domains, 12,000+ URL pattern rules, and 13,600+ cosmetic selectors that hide ad containers even when the network request can't be intercepted.
+• 12,000+ network block rules (domain-anchored and URL patterns) plus 29,000+ cosmetic selectors across 7,600+ sites that hide ad containers even when the network request can't be intercepted.
 
 • Tracker learning — QuietBrowse watches which third-party domains follow you across multiple sites. Domains seen repeatedly are shown for review, with optional auto-blocking using cookie access as an extra local signal. All heuristics run entirely on your device.
 
@@ -96,7 +106,7 @@ These are best-effort protections — not a replacement for antivirus software.
 
 QuietBrowse does not collect, transmit, or sell your browsing data. By default, outbound network requests are limited to direct downloads of public filter lists from easylist.to. If you enable optional Fanboy lists, those are fetched from secure.fanboy.co.nz. If you add a custom filter-list URL, QuietBrowse downloads that list directly from the URL you provide. Everything else — your settings, learned trackers, block statistics, zapped elements, and tracker heuristics — stays in Chrome's local extension storage on your device and is deleted when you remove the extension. Auto-blocking of learned trackers is off by default and must be enabled in Settings.
 
-Full privacy policy: [link to your hosted privacy.html]
+Full privacy policy: https://ansh0079.github.io/shieldwall/privacy.html
 
 ─────────────────────────────────────────
  ATTRIBUTION
