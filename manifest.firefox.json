@@ -16,7 +16,6 @@
     "gecko_android": {}
   },
   "permissions": [
-    "activeTab",
     "declarativeNetRequest",
     "storage",
     "tabs",

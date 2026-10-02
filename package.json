@@ -2,7 +2,7 @@
   "name": "quietbrowse",
   "version": "4.6.4",
   "private": true,
-  "description": "Privacy-first ad and tracker blocker (Chrome / Edge / Brave / Firefox)",
+  "description": "Privacy-first ad and tracker blocker (Chrome / Edge / Brave / Firefox) — local-only dev scripts",
   "license": "GPL-3.0",
   "scripts": {
     "test": "node tools/validate_extension.js && node tools/test_unit.js",
@@ -14,7 +14,10 @@
     "compare": "node tools/compare.js",
     "metrics": "node tools/listing_metrics.js",
     "build:xpi": "node tools/pack.firefox.js",
-    "release:check": "node tools/release_check.js"
+    "release:check": "node tools/release_check.js",
+    "pack": "node tools/pack.js",
+    "pack:firefox": "node tools/pack.firefox.js",
+    "pack:edge": "node tools/pack.edge.js"
   },
   "devDependencies": {
     "puppeteer-core": "^22.0.0"

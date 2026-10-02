@@ -269,6 +269,40 @@ console.log("filter persistence");
   });
 }
 
+console.log("YouTube scriptlets prune");
+{
+  const ctx = {
+    console,
+    window: {},
+    Response: function() {},
+    JSON,
+    setTimeout, clearTimeout, setInterval, clearInterval
+  };
+  ctx.globalThis = ctx;
+  ctx.window = ctx; // emulate main world
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(ROOT, "scriptlets.js"), "utf8"), ctx, { filename: "scriptlets.js" });
+  test("removes ad keys from player response safely", () => {
+    const sample = {
+      playerResponse: {
+        videoDetails: { title: "Test" },
+        adPlacements: [{ foo: 1 }],
+        adSignals: { bar: 2 }
+      },
+      adSlots: [1, 2, 3],
+      other: { nested: { adSafetyReasons: ["x"] , keep: true } }
+    };
+    const prune = ctx.__qbYT_prune;
+    assert(typeof prune === "function", "prune exported");
+    const out = prune(JSON.parse(JSON.stringify(sample)));
+    assert(!("adPlacements" in out.playerResponse), "adPlacements removed");
+    assert(!("adSignals" in out.playerResponse), "adSignals removed");
+    assert(!("adSlots" in out), "adSlots removed");
+    assert(out.playerResponse.videoDetails.title === "Test", "video details intact");
+    assert(out.other.nested.keep === true, "unrelated fields intact");
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log("\n" + passed + " passed, " + failed + " failed");
   if (failed) process.exit(1);

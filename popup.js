@@ -18,6 +18,14 @@ const zapBtn = document.getElementById("zapBtn");
 const fixSiteBtn = document.getElementById("fixSiteBtn");
 const reportCheck = document.getElementById("reportCheck");
 const optionsLink = document.getElementById("optionsLink");
+const allowAdsBtn = document.getElementById("allowAdsBtn");
+const promoSection = document.getElementById("promo");
+const reviewPromptEl = document.getElementById("reviewPrompt");
+const reviewCtaBtn = document.getElementById("reviewCta");
+const reviewDismissBtn = document.getElementById("reviewDismiss");
+const shareCardEl = document.getElementById("shareMilestone");
+const shareTitleEl = document.getElementById("shareTitle");
+const shareBtn = document.getElementById("shareBtn");
 
 const CATEGORY_ORDER = ["advertising", "analytics", "social", "other", "learned"];
 
@@ -69,12 +77,16 @@ async function init() {
     siteRow.classList.add("disabled");
     zapBtn.disabled = true;
     fixSiteBtn.disabled = true;
+    allowAdsBtn.disabled = true;
   }
 
   const data = await chrome.storage.local.get({
     enabled: true,
     siteModes: {},
-    totalBlocked: 0
+    totalBlocked: 0,
+    installAt: null,
+    reviewPromptDone: false,
+    milestoneShared_10000: false
   });
 
   protectionEnabled = data.enabled;
@@ -87,6 +99,7 @@ async function init() {
 
   totalCountEl.textContent = formatCount(data.totalBlocked);
   setRowsEnabled(data.enabled);
+  maybeShowPromos(data);
 
   if (currentTabId !== null) {
     chrome.runtime.sendMessage(
@@ -106,6 +119,72 @@ async function init() {
       }
     );
   }
+
+  // Wire promo actions
+  reviewCtaBtn?.addEventListener("click", () => {
+    chrome.storage.local.set({ reviewPromptDone: true }, () => {
+      reviewPromptEl.hidden = true;
+      maybeHidePromoContainer();
+      chrome.tabs.create({
+        url: "https://chromewebstore.google.com/detail/quietbrowse/ocpnpehnpilheklhbicgaaacaogipaml/reviews"
+      });
+    });
+  });
+  reviewDismissBtn?.addEventListener("click", () => {
+    chrome.storage.local.set({ reviewPromptDone: true }, () => {
+      reviewPromptEl.hidden = true;
+      maybeHidePromoContainer();
+    });
+  });
+  shareBtn?.addEventListener("click", async () => {
+    const countText = totalCountEl.textContent || "10k";
+    const text = `I've blocked ${countText} trackers with QuietBrowse — zero data collection. Try it: https://chromewebstore.google.com/detail/quietbrowse/ocpnpehnpilheklhbicgaaacaogipaml`;
+    try {
+      if (navigator.share && typeof navigator.share === "function") {
+        await navigator.share({ text });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        flashHint(i18n("shareCopied"));
+      }
+    } catch {
+      /* ignore */
+    }
+    chrome.storage.local.set({ milestoneShared_10000: true }, () => {
+      shareCardEl.hidden = true;
+      maybeHidePromoContainer();
+    });
+  });
+}
+
+function maybeShowPromos(data) {
+  // Ensure installAt is set for older installs
+  if (!data.installAt) chrome.storage.local.set({ installAt: Date.now() });
+  const now = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const hasTime = data.installAt && now - data.installAt >= sevenDaysMs;
+  const ENOUGH_BLOCKS = 1000;
+  const hasBlocks = (data.totalBlocked || 0) >= ENOUGH_BLOCKS;
+
+  const showReview = !data.reviewPromptDone && (hasTime || hasBlocks);
+
+  // Milestone: 10,000 trackers blocked
+  const showShare = !data.milestoneShared_10000 && (data.totalBlocked || 0) >= 10000;
+  if (showShare) {
+    const pretty = formatCount(data.totalBlocked);
+    if (shareTitleEl) {
+      shareTitleEl.textContent = i18n("milestoneTitle", pretty);
+    }
+    shareCardEl.hidden = false;
+  } else {
+    shareCardEl.hidden = true;
+  }
+
+  reviewPromptEl.hidden = !showReview;
+  promoSection.hidden = reviewPromptEl.hidden && shareCardEl.hidden;
+}
+
+function maybeHidePromoContainer() {
+  if (reviewPromptEl.hidden && shareCardEl.hidden) promoSection.hidden = true;
 }
 
 function loadTrustScore(tabId) {
@@ -330,4 +409,9 @@ zapBtn.addEventListener("click", () => {
       flashHint(i18n("hintCantZap"));
     }
   });
+});
+
+allowAdsBtn.addEventListener("click", () => {
+  if (!currentDomain) return;
+  applySiteMode("ads");
 });

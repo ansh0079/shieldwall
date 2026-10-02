@@ -1220,9 +1220,12 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     customFilterLists: [],
     breakageReports: [],
     lastFilterUpdate: 0,
-    useUpdatedLists: false
+    useUpdatedLists: false,
+    installAt: null
   });
-  await chrome.storage.local.set(data);
+  // Set first-install timestamp once (used for gentle review prompt timing).
+  const installAt = data.installAt || Date.now();
+  await chrome.storage.local.set({ ...data, installAt });
   const siteModes = await migrateSiteModes();
   await chrome.storage.local.set({ siteModes });
   await restoreState();

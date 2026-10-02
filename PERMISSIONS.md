@@ -6,6 +6,8 @@ Use this document when filling out the Chrome Web Store listing or responding to
 
 QuietBrowse needs broad access because **blocking ads and trackers only works if the extension can see network requests on the pages you visit**. All processing is local. Nothing is sent to QuietBrowse servers — we don't have any.
 
+> Note: `webRequest` is used for observation only; all blocking is done via `declarativeNetRequest`.
+
 ---
 
 ## `host_permissions`: `<all_urls>`

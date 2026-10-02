@@ -286,6 +286,15 @@
       proceduralObserver.observe(root, { childList: true, subtree: true });
     }
 
+    // Hard upper bound for SPAs: disconnect after a fixed cap to avoid long-lived observers.
+    const OBSERVER_CAP_MS = 7000;
+    setTimeout(() => {
+      if (proceduralObserver) {
+        try { proceduralObserver.disconnect(); } catch {}
+        proceduralObserver = null;
+      }
+    }, OBSERVER_CAP_MS);
+
     // Final pass + disconnect after page settles
     window.addEventListener("load", () => {
       setTimeout(() => {
