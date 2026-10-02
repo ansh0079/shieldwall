@@ -26,6 +26,54 @@
     "all", "inline-script", "inline-font", "cname"
   ]);
 
+  /**
+   * Returns null if `urlFilter` is acceptable to Chrome's declarativeNetRequest
+   * parser, otherwise a short reason string. Mirrors the checks in Chromium's
+   * indexed_rule.cc that reject a whole static ruleset at load time:
+   *   - must be a non-empty string of ASCII characters
+   *   - must not consist only of anchors ("|", "||", "|||")
+   *   - must not start with "||*" (domain anchor followed by a wildcard)
+   */
+  function urlFilterError(urlFilter) {
+    if (typeof urlFilter !== "string" || urlFilter.length === 0) return "empty urlFilter";
+    if (!/^[\x00-\x7f]*$/.test(urlFilter)) return "non-ASCII urlFilter";
+    if (/^\|{1,3}$/.test(urlFilter)) return "anchor-only urlFilter";
+    if (urlFilter.startsWith("||*")) return "urlFilter starts with '||*'";
+    return null;
+  }
+
+  /**
+   * Validate a single DNR rule's condition fields that Chrome rejects at load
+   * time. Returns null if valid, otherwise a reason string.
+   */
+  function dnrRuleError(rule) {
+    const cond = rule && rule.condition;
+    if (!cond || typeof cond !== "object") return "missing condition";
+    if (cond.urlFilter !== undefined) {
+      const e = urlFilterError(cond.urlFilter);
+      if (e) return e;
+    }
+    if (cond.urlFilter !== undefined && cond.regexFilter !== undefined) {
+      return "both urlFilter and regexFilter set";
+    }
+    for (const key of ["requestDomains", "initiatorDomains", "domains"]) {
+      if (cond[key] === undefined) continue;
+      if (!Array.isArray(cond[key]) || cond[key].length === 0) return `empty ${key}`;
+    }
+    for (const key of ["requestDomains", "excludedRequestDomains", "initiatorDomains", "excludedInitiatorDomains", "domains", "excludedDomains"]) {
+      if (cond[key] === undefined) continue;
+      for (const d of cond[key]) {
+        if (typeof d !== "string" || !d || !/^[\x00-\x7f]*$/.test(d) || d !== d.toLowerCase()) {
+          return `invalid ${key} entry: ${JSON.stringify(d)}`;
+        }
+      }
+    }
+    if (cond.resourceTypes !== undefined && (!Array.isArray(cond.resourceTypes) || cond.resourceTypes.length === 0)) {
+      return "empty resourceTypes";
+    }
+    return null;
+  }
+
   const PURE_DOMAIN_RE =
     /^\|\|([a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+)\^$/;
 
@@ -352,6 +400,7 @@
     const allowRules = [];
     const paramRules = [];
     let skipped = 0;
+    let invalidUrlFilters = 0;
 
     for (const text of texts) {
       for (let line of text.split("\n")) {
@@ -369,6 +418,10 @@
         if (!pattern) { skipped++; continue; }
         if (pattern.startsWith("/") && pattern.endsWith("/")) { skipped++; continue; }
         if (!/^[\x20-\x7e]+$/.test(pattern)) { skipped++; continue; }
+
+        // Patterns Chrome's DNR parser rejects (e.g. "||*foo") would make the
+        // whole ruleset fail to load, so drop them here.
+        if (urlFilterError(pattern)) { skipped++; invalidUrlFilters++; continue; }
 
         const opts = parseOptions(optStr);
         if (!opts) { skipped++; continue; }
@@ -475,13 +528,15 @@
         siteUnhideDomains: Object.keys(cosmetic.siteUnhide).length,
         scriptletRules: Object.keys(cosmetic.scriptletRules).length,
         proceduralRules: proceduralCount,
-        skipped
+        skipped,
+        invalidUrlFilters
       }
     };
   }
 
   global.compileFilters = compileFilters;
+  global.dnrRuleError = dnrRuleError;
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { compileFilters };
+    module.exports = { compileFilters, urlFilterError, dnrRuleError };
   }
 })(typeof self !== "undefined" ? self : globalThis);

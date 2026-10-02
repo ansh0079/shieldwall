@@ -80,6 +80,26 @@ console.log("filter_compiler");
     const hasRule = (c.siteHide["example.com"] || []).some((s) => s.includes(":has("));
     assert(hasRule, ":-abp-has should become :has");
   });
+  test("drops patterns Chrome DNR rejects (||* prefix)", () => {
+    const c = compileFilters([
+      "||*optout$third-party\n||*.exaapi.com^\n@@||*.allowed.example^\n||*status$removeparam=x\n||ok.example/path\n"
+    ]);
+    const all = [...c.blockRules, ...c.allowRules, ...c.paramRules];
+    assert(!all.some((r) => (r.condition.urlFilter || "").startsWith("||*")), "no ||* urlFilter emitted");
+    assert(c.blockRules.length === 1, "valid rule kept");
+    assert(c.stats.invalidUrlFilters === 4, "counts dropped patterns, got " + c.stats.invalidUrlFilters);
+  });
+  test("dnrRuleError flags invalid conditions", () => {
+    const { dnrRuleError, urlFilterError } = require(path.join(ROOT, "filter_compiler.js"));
+    assert(urlFilterError("||*foo"), "||* rejected");
+    assert(urlFilterError("||"), "anchor-only rejected");
+    assert(urlFilterError("caf\u00e9"), "non-ASCII rejected");
+    assert(urlFilterError("||example.com^") === null, "normal filter ok");
+    assert(urlFilterError("*foo") === null, "leading wildcard ok");
+    assert(dnrRuleError({ condition: { requestDomains: [] } }), "empty requestDomains rejected");
+    assert(dnrRuleError({ condition: { requestDomains: ["Example.com"] } }), "uppercase domain rejected");
+    assert(dnrRuleError({ condition: { urlFilter: "||a.example^" } }) === null, "valid rule ok");
+  });
   test("skips unsupported options safely", () => {
     const c = compileFilters(["||x.example^$csp=script-src\n||y.example^\n"]);
     assert(c.blockRules.length >= 1, "still compiles valid lines");
