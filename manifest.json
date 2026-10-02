@@ -6,7 +6,6 @@
   "default_locale": "en",
   "minimum_chrome_version": "121",
   "permissions": [
-    "activeTab",
     "declarativeNetRequest",
     "storage",
     "tabs",
