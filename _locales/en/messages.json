@@ -1001,5 +1001,36 @@
   "alertAutoBlockFailed": {
     "message": "Could not enable auto-blocking",
     "description": "Alert when enabling auto-block learned trackers fails."
+  },
+  "reviewPromptTitle": {
+    "message": "Enjoying QuietBrowse?",
+    "description": "Title for gentle review prompt in popup."
+  },
+  "reviewPromptBody": {
+    "message": "Please leave a review — it helps others discover it.",
+    "description": "Body text for review prompt."
+  },
+  "reviewPromptCta": {
+    "message": "Leave a review",
+    "description": "CTA button for review prompt."
+  },
+  "reviewPromptDismiss": {
+    "message": "Dismiss",
+    "description": "Dismiss button for review prompt."
+  },
+  "milestoneTitle": {
+    "message": "You've blocked $count$ trackers",
+    "description": "Milestone title in popup when a large total is reached.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "10,000" }
+    }
+  },
+  "milestoneShare": {
+    "message": "Share",
+    "description": "Share button for milestone card."
+  },
+  "shareCopied": {
+    "message": "Copied share text",
+    "description": "Hint after copying share text to clipboard."
   }
 }
