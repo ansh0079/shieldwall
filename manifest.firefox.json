@@ -9,7 +9,9 @@
       "id": "quietbrowse@quietbrowse",
       "strict_min_version": "128.0",
       "data_collection_permissions": {
-        "required": ["none"],
+        "required": [
+          "none"
+        ],
         "optional": []
       }
     },
@@ -29,7 +31,9 @@
     "scripting",
     "unlimitedStorage"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "scripts": [
       "trackers.js",
@@ -50,7 +54,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "js": [
         "utils.js",
         "phish_score.js",
@@ -78,6 +84,81 @@
         "id": "quiet_privacy",
         "enabled": true,
         "path": "privacy_rules.json"
+      },
+      {
+        "id": "quiet_headers",
+        "enabled": true,
+        "path": "headers_rules.json"
+      },
+      {
+        "id": "quiet_opt_adguard-base_p1",
+        "enabled": true,
+        "path": "rules_opt_adguard-base_p1.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p1",
+        "enabled": false,
+        "path": "rules_opt_adguard-tracking_p1.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p2",
+        "enabled": false,
+        "path": "rules_opt_adguard-tracking_p2.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p3",
+        "enabled": false,
+        "path": "rules_opt_adguard-tracking_p3.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p4",
+        "enabled": false,
+        "path": "rules_opt_adguard-tracking_p4.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p5",
+        "enabled": false,
+        "path": "rules_opt_adguard-tracking_p5.json"
+      },
+      {
+        "id": "quiet_opt_peterlowe_p1",
+        "enabled": true,
+        "path": "rules_opt_peterlowe_p1.json"
+      },
+      {
+        "id": "quiet_opt_ublock-filters_p1",
+        "enabled": true,
+        "path": "rules_opt_ublock-filters_p1.json"
+      },
+      {
+        "id": "quiet_opt_ublock-privacy_p1",
+        "enabled": true,
+        "path": "rules_opt_ublock-privacy_p1.json"
+      },
+      {
+        "id": "quiet_opt_ubo-quick-fixes_p1",
+        "enabled": true,
+        "path": "rules_opt_ubo-quick-fixes_p1.json"
+      },
+      {
+        "id": "quiet_opt_fanboy-annoyance_p1",
+        "enabled": false,
+        "path": "rules_opt_fanboy-annoyance_p1.json"
+      },
+      {
+        "id": "quiet_opt_easylist-cookie_p1",
+        "enabled": false,
+        "path": "rules_opt_easylist-cookie_p1.json"
+      },
+      {
+        "id": "quiet_opt_fanboy-social_p1",
+        "enabled": false,
+        "path": "rules_opt_fanboy-social_p1.json"
+      },
+      {
+        "id": "quiet_opt_easylist-germany_p1",
+        "enabled": false,
+        "path": "rules_opt_easylist-germany_p1.json"
       }
     ]
   },

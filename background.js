@@ -665,9 +665,9 @@ async function setGlobalEnabled(enabled) {
       removeRuleIds: [GLOBAL_PAUSE_RULE_ID]
     });
 
-    const enableIds = [RULESET_ID];
+    const enableIds = [RULESET_ID, EASYPRIVACY_RULESET_ID];
     const disableIds = [];
-    (data.useUpdatedLists ? disableIds : enableIds).push(EASYLIST_RULESET_ID);
+    (data.useUpdatedLists ? disableIds : enableIds).push(EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID);
     (data.privacySignals ? enableIds : disableIds).push(PRIVACY_RULESET_ID);
     await chrome.declarativeNetRequest.updateEnabledRulesets({
       enableRulesetIds: enableIds,

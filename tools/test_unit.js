@@ -303,6 +303,32 @@ console.log("YouTube scriptlets prune");
   });
 }
 
+console.log("Scriptlet catalog site rules");
+{
+  // Emulate main world with location.hostname = youtube.com to trigger RULES
+  const ctx = {
+    console,
+    window: {},
+    Response: function() {},
+    JSON,
+    location: { hostname: "www.youtube.com" },
+    setTimeout, clearTimeout
+  };
+  ctx.globalThis = ctx;
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(ROOT, "scriptlets_catalog.js"), "utf8"), ctx, { filename: "scriptlets_catalog.js" });
+  test("json-prune removes YouTube ad fields via catalog", () => {
+    const sample = JSON.stringify({
+      playerResponse: { adPlacements: [{ id: 1 }], playerAds: [{ id: 2 }], other: 1 }
+    });
+    const obj = JSON.parse(sample);
+    assert(!obj.playerResponse.adPlacements, "catalog pruned adPlacements");
+    assert(!obj.playerResponse.playerAds, "catalog pruned playerAds");
+    assert(obj.playerResponse.other === 1, "kept other fields");
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log("\n" + passed + " passed, " + failed + " failed");
   if (failed) process.exit(1);

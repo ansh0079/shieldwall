@@ -25,6 +25,7 @@ function validateJsonFiles() {
     "rules.json",
     "easylist_rules.json",
     "privacy_rules.json",
+    "headers_rules.json",
     "cosmetic_sites.json"
   ]) {
     parseJson(file);
@@ -38,6 +39,10 @@ function validateJsonFiles() {
   assert(
     !contentJs.includes("psl_data.js"),
     "content_scripts must not inject psl_data.js (keep it in the service worker only)"
+  );
+  assert(
+    !contentJs.includes("cosmetic_filters.js"),
+    "content_scripts must not inject cosmetic_filters.js (cosmetics come from storage per-site)"
   );
 }
 
@@ -88,7 +93,9 @@ function validateManifest() {
 }
 
 function validateRules() {
-  const rules = parseJson("easylist_rules.json");
+  const el = parseJson("easylist_rules.json");
+  const ep = parseJson("privacy_rules.json");
+  const rules = el;
   const ids = new Set();
   for (const rule of rules) {
     assert(Number.isInteger(rule.id), "DNR rule id must be an integer");
@@ -96,7 +103,11 @@ function validateRules() {
     ids.add(rule.id);
     assert(rule.action && rule.condition, `rule ${rule.id} missing action/condition`);
   }
-  assert(rules.length >= 5000, `easylist rule count too low: ${rules.length}`);
+  // After splitting EasyPrivacy into its own static ruleset, assert on combined coverage.
+  const elCount = el.length;
+  const epCount = ep.length;
+  assert(elCount >= 3500, `EasyList rule count unexpectedly low: ${elCount}`);
+  assert(elCount + epCount >= 12000, `Combined EasyList/EasyPrivacy rule count too low: ${elCount + epCount}`);
 }
 
 function validateFirefoxManifest() {

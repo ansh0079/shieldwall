@@ -2,8 +2,11 @@
 
 const RULESET_ID = "quiet_rules";
 const EASYLIST_RULESET_ID = "quiet_easylist";
-const PRIVACY_RULESET_ID = "quiet_privacy";
-const BLOCK_RULESETS = [RULESET_ID, EASYLIST_RULESET_ID];
+// EasyPrivacy network rules (always-on static ruleset)
+const EASYPRIVACY_RULESET_ID = "quiet_privacy";
+// Privacy headers/params toggles (enable/disable via Settings)
+const PRIVACY_RULESET_ID = "quiet_headers";
+const BLOCK_RULESETS = [RULESET_ID, EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID];
 
 const EASYLIST_BLOCK_ID_START = 50000;
 
@@ -60,6 +63,41 @@ const DEFAULT_FILTER_URLS = [
 // Optional EasyList-family lists (CC BY-SA 3.0 / GPL-3.0). Toggled in Settings.
 // Fanboy Annoyance already includes Cookie + Social — prefer one or the other.
 const OPTIONAL_FILTER_LISTS = [
+  {
+    id: "adguard-base",
+    title: "AdGuard Base",
+    url: "https://filters.adtidy.org/extension/ublock/filters/2.txt",
+    defaultEnabled: true,
+    note: "General ads/tracking; complements EasyList"
+  },
+  {
+    id: "adguard-tracking",
+    title: "AdGuard Tracking Protection",
+    url: "https://filters.adtidy.org/extension/ublock/filters/3.txt",
+    defaultEnabled: true,
+    note: "Tracker blocking; complements EasyPrivacy"
+  },
+  {
+    id: "peterlowe",
+    title: "Peter Lowe’s ad/tracking list",
+    url: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext",
+    defaultEnabled: true,
+    note: "Domain-based blocklist"
+  },
+  {
+    id: "ublock-filters",
+    title: "uBlock Origin – Filters",
+    url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
+    defaultEnabled: true,
+    note: "Base uBO list"
+  },
+  {
+    id: "ublock-privacy",
+    title: "uBlock Origin – Privacy",
+    url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
+    defaultEnabled: true,
+    note: "uBO privacy list"
+  },
   {
     id: "ubo-quick-fixes",
     title: "Quick Fixes (uBlock Assets)",

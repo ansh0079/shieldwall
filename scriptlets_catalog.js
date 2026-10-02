@@ -181,6 +181,11 @@
 
   // Hostname-keyed scriptlet prescriptions.
   const RULES = {
+    "youtube.com": [
+      ["json-prune", "playerResponse.adPlacements playerResponse.playerAds adPlacements adSlots adBreaks adSignals adSafetyReasons"],
+      ["set-constant", "ytInitialPlayerResponse.adPlacements", "emptyArr"],
+      ["set-constant", "ytInitialPlayerResponse.adSlots", "emptyArr"]
+    ],
     "forbes.com": [
       ["set-constant", "adblock", "false"],
       ["set-constant", "canRunAds", "true"]
