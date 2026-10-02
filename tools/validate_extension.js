@@ -25,6 +25,7 @@ function validateJsonFiles() {
     "rules.json",
     "easylist_rules.json",
     "privacy_rules.json",
+    "headers_rules.json",
     "cosmetic_sites.json"
   ]) {
     parseJson(file);
@@ -38,6 +39,10 @@ function validateJsonFiles() {
   assert(
     !contentJs.includes("psl_data.js"),
     "content_scripts must not inject psl_data.js (keep it in the service worker only)"
+  );
+  assert(
+    !contentJs.includes("cosmetic_filters.js"),
+    "content_scripts must not inject cosmetic_filters.js (cosmetics come from storage per-site)"
   );
 }
 

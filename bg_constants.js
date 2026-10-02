@@ -2,8 +2,11 @@
 
 const RULESET_ID = "quiet_rules";
 const EASYLIST_RULESET_ID = "quiet_easylist";
-const PRIVACY_RULESET_ID = "quiet_privacy";
-const BLOCK_RULESETS = [RULESET_ID, EASYLIST_RULESET_ID];
+// EasyPrivacy network rules (always-on static ruleset)
+const EASYPRIVACY_RULESET_ID = "quiet_privacy";
+// Privacy headers/params toggles (enable/disable via Settings)
+const PRIVACY_RULESET_ID = "quiet_headers";
+const BLOCK_RULESETS = [RULESET_ID, EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID];
 
 const EASYLIST_BLOCK_ID_START = 50000;
 

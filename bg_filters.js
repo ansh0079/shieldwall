@@ -256,19 +256,19 @@ async function updateFilterLists() {
             await applyUpdatedRulesToDnr(prev.updatedRules);
           } catch {
             await chrome.declarativeNetRequest
-              .updateEnabledRulesets({ enableRulesetIds: [EASYLIST_RULESET_ID] })
+              .updateEnabledRulesets({ enableRulesetIds: [EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID] })
               .catch(() => {});
           }
         } else {
           await chrome.declarativeNetRequest
-            .updateEnabledRulesets({ enableRulesetIds: [EASYLIST_RULESET_ID] })
+            .updateEnabledRulesets({ enableRulesetIds: [EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID] })
             .catch(() => {});
         }
         throw new Error("Dynamic rule install failed: " + e.message);
       }
 
       await chrome.declarativeNetRequest.updateEnabledRulesets({
-        disableRulesetIds: [EASYLIST_RULESET_ID]
+        disableRulesetIds: [EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID]
       });
     }
 

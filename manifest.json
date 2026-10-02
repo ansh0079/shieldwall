@@ -61,6 +61,11 @@
         "path": "privacy_rules.json"
       },
       {
+        "id": "quiet_headers",
+        "enabled": true,
+        "path": "headers_rules.json"
+      },
+      {
         "id": "quiet_opt_ubo-quick-fixes_p1",
         "enabled": false,
         "path": "rules_opt_ubo-quick-fixes_p1.json"
