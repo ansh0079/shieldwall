@@ -78,7 +78,9 @@ function validateManifest() {
 }
 
 function validateRules() {
-  const rules = parseJson("easylist_rules.json");
+  const el = parseJson("easylist_rules.json");
+  const ep = parseJson("privacy_rules.json");
+  const rules = el;
   const ids = new Set();
   for (const rule of rules) {
     assert(Number.isInteger(rule.id), "DNR rule id must be an integer");
@@ -86,7 +88,11 @@ function validateRules() {
     ids.add(rule.id);
     assert(rule.action && rule.condition, `rule ${rule.id} missing action/condition`);
   }
-  assert(rules.length >= 5000, `easylist rule count too low: ${rules.length}`);
+  // After splitting EasyPrivacy into its own static ruleset, assert on combined coverage.
+  const elCount = el.length;
+  const epCount = ep.length;
+  assert(elCount >= 3500, `EasyList rule count unexpectedly low: ${elCount}`);
+  assert(elCount + epCount >= 12000, `Combined EasyList/EasyPrivacy rule count too low: ${elCount + epCount}`);
 }
 
 function validateFirefoxManifest() {

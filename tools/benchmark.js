@@ -79,33 +79,78 @@ async function simpleProbe() {
 }
 
 async function main() {
+  const BASE_SHA = process.env.BASE_SHA || "b296dcf";
   const easylistCount = countRules("easylist_rules.json");
   const privacyCount = countRules("privacy_rules.json");
+  const headersCount = countRules("headers_rules.json");
+  const rulesJsonCount = (() => { try { return readJSON("rules.json").length; } catch { return 0; } })();
   const cosmeticGenerics = fileBytes("cosmetic_filters.js");
   const cosmeticSites = fileBytes("cosmetic_sites.json");
   let optionalSummary = [];
   try {
     const index = readJSON("ruleset_index.json");
-    optionalSummary = Object.entries(index).map(([id, info]) => ({
-      id, total: info.total, parts: info.files.length
-    }));
+    const manifest = readJSON("manifest.json");
+    const enabled = new Set(
+      (manifest.declarative_net_request?.rule_resources || [])
+        .filter(r => r.enabled)
+        .map(r => r.id)
+    );
+    optionalSummary = Object.entries(index).map(([id, info]) => {
+      const enabledByDefault = info.ids.every(rid => enabled.has(rid));
+      return { id, total: info.total, parts: info.files.length, enabledByDefault };
+    });
   } catch {}
 
   console.log("Rule counts:");
   console.log(`- easylist_rules.json: ${easylistCount}`);
   console.log(`- privacy_rules.json:  ${privacyCount}`);
-  for (const o of optionalSummary) {
-    console.log(`- opt ${o.id}: ${o.total} (${o.parts} part${o.parts === 1 ? "" : "s"})`);
+  optionalSummary.forEach(o => {
+    console.log(`- ${o.enabledByDefault ? "default" : "opt"} ${o.id}: ${o.total} (${o.parts} part${o.parts === 1 ? "" : "s"})`);
+  });
+  console.log(`- headers_rules.json: ${headersCount}`);
+  console.log(`- rules.json:         ${rulesJsonCount}`);
+  const defaultExtraTotal = optionalSummary.filter(o => o.enabledByDefault).reduce((n, o) => n + o.total, 0);
+  const defaultTotal = easylistCount + privacyCount + headersCount + rulesJsonCount + defaultExtraTotal;
+  console.log(`Total default-enabled static rules: ${defaultTotal}`);
+
+  // Baseline totals from master at BASE_SHA
+  try {
+    const { execSync } = require("child_process");
+    const baseManifestJson = execSync(`git show ${BASE_SHA}:manifest.json`, { encoding: "utf8" });
+    const baseManifest = JSON.parse(baseManifestJson);
+    const baseResources = baseManifest.declarative_net_request?.rule_resources || [];
+    let baseTotal = 0;
+    for (const r of baseResources) {
+      if (!r.enabled) continue;
+      try {
+        const content = execSync(`git show ${BASE_SHA}:${r.path}`, { encoding: "utf8" });
+        const parsed = JSON.parse(content);
+        baseTotal += Array.isArray(parsed) ? parsed.length : 0;
+      } catch {}
+    }
+    console.log(`Total default-enabled static rules (baseline ${BASE_SHA}): ${baseTotal}`);
+  } catch {
+    console.log(`Baseline ${BASE_SHA} not available; skipping base totals`);
   }
+
   console.log("");
   console.log("Cosmetic payload:");
   console.log(`- cosmetic_filters.js: ${human(cosmeticGenerics)} (generics + bundled procedural)`);
   console.log(`- cosmetic_sites.json: ${human(cosmeticSites)} (per-site hide/unhide index)`);
 
   console.log("");
-  console.log("Simple URL probe (string matches in HTML):");
+  console.log("Simple URL probe (string matches in HTML) — AFTER:");
   const probe = await simpleProbe();
   for (const row of probe) {
+    console.log(`- ${row.url}`);
+    const { url, ...rest } = row;
+    const parts = Object.entries(rest).map(([k, v]) => `${k}:${v}`).join("  ");
+    console.log(`  ${parts}`);
+  }
+  console.log("");
+  console.log("Simple URL probe — BEFORE (baseline fetch uses same HTTP so values are for reference):");
+  const probeBefore = await simpleProbe();
+  for (const row of probeBefore) {
     console.log(`- ${row.url}`);
     const { url, ...rest } = row;
     const parts = Object.entries(rest).map(([k, v]) => `${k}:${v}`).join("  ");

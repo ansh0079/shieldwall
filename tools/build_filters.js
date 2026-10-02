@@ -25,8 +25,35 @@ const OUT_DIR = path.join(__dirname, "..");
 const BLOCK_ID_START = 50000;
 const PARAM_ID_BASE = 200000; // keep unique within the file
 const MAX_STATIC_RULES_PER_FILE = 25000;
+const STATIC_RULES_BUDGET = 30000; // Chrome guaranteed minimum
+const STATIC_RULES_BUDGET_SAFETY = 29500; // leave some headroom
 
 const OPTIONAL_LISTS = [
+  {
+    id: "adguard-base",
+    title: "AdGuard Base",
+    url: "https://filters.adtidy.org/extension/ublock/filters/2.txt"
+  },
+  {
+    id: "adguard-tracking",
+    title: "AdGuard Tracking Protection",
+    url: "https://filters.adtidy.org/extension/ublock/filters/3.txt"
+  },
+  {
+    id: "peterlowe",
+    title: "Peter Lowe’s ad/tracking list",
+    url: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext"
+  },
+  {
+    id: "ublock-filters",
+    title: "uBlock Origin – Filters",
+    url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt"
+  },
+  {
+    id: "ublock-privacy",
+    title: "uBlock Origin – Privacy",
+    url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt"
+  },
   {
     id: "ubo-quick-fixes",
     title: "Quick Fixes (uBlock Assets)",
@@ -83,6 +110,18 @@ function chunkArray(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
+}
+
+function pruneTextBySeen(text, seen) {
+  const out = [];
+  for (let line of text.split("\n")) {
+    line = line.trim();
+    if (!line || line.startsWith("!") || line.startsWith("[")) continue;
+    if (seen.has(line)) continue;
+    seen.add(line);
+    out.push(line);
+  }
+  return out.join("\n");
 }
 
 async function main() {
@@ -148,34 +187,85 @@ async function main() {
 
   writeJson("cosmetic_sites.json", { hide: cEL.siteHide, unhide: cEL.siteUnhide });
 
-  // Build optional static rulesets
-  console.log("\nBuilding optional static rulesets...");
+  // Build additional static rulesets (optional or default-enabled based on budget)
+  console.log("\nBuilding additional static rulesets...");
   const rulesetIndex = {};
+  // Priority for default-enabled selection (highest first)
+  const DEFAULT_PRIORITY = [
+    "ubo-quick-fixes",
+    "ublock-filters",
+    "ublock-privacy",
+    "adguard-tracking",
+    "peterlowe",
+    "adguard-base"
+  ];
+  const defaultCandidates = new Map(OPTIONAL_LISTS.map((l) => [l.id, l]));
+  const seenLines = new Set();
+  // Seed dedupe with EasyList/EasyPrivacy lines
+  pruneTextBySeen(elText, seenLines);
+  pruneTextBySeen(epText, seenLines);
+  const perListRules = {};
+  const defaultEnableIds = new Set();
+  // Gather rules for each list with cross-list dedupe on default ordering
   for (const opt of OPTIONAL_LISTS) {
     try {
-      const text = await download(opt.url);
+      const raw = await download(opt.url);
+      const text = DEFAULT_PRIORITY.includes(opt.id)
+        ? pruneTextBySeen(raw, seenLines)
+        : raw;
       const cc = compileFilters([text], { maxBlockRules: 100000, maxAllowRules: 10000, domainsPerGroup: 1000 });
       const rules = [
         ...cc.allowRules.map((r, i) => ({ ...r, id: i + 1 })),
         ...cc.blockRules.map((r, i) => ({ ...r, id: BLOCK_ID_START + i })),
         ...(cc.paramRules || []).map((r, i) => ({ ...r, id: PARAM_ID_BASE + i }))
       ];
-      const chunks = chunkArray(rules, MAX_STATIC_RULES_PER_FILE);
-      const fileIds = [];
-      const fileNames = [];
-      const counts = [];
-      chunks.forEach((chunk, idx) => {
-        const fname = `rules_opt_${opt.id}_p${idx + 1}.json`;
-        writeJson(fname, chunk);
-        const rid = `quiet_opt_${opt.id}_p${idx + 1}`;
-        fileIds.push(rid);
-        fileNames.push(fname);
-        counts.push(chunk.length);
-      });
-      rulesetIndex[opt.id] = { ids: fileIds, files: fileNames, counts, total: rules.length, title: opt.title };
-      console.log(`  ${opt.id}: ${rules.length} rules (${fileNames.join(", ")})`);
+      perListRules[opt.id] = { rules, count: rules.length, title: opt.title };
     } catch (e) {
       console.warn(`  Skipped ${opt.id}: ${e.message}`);
+    }
+  }
+  // Decide which lists are enabled by default within the static rules budget
+  const coreEasy = JSON.parse(fs.readFileSync(path.join(OUT_DIR, "easylist_rules.json"), "utf8")).length;
+  const corePrivacy = JSON.parse(fs.readFileSync(path.join(OUT_DIR, "privacy_rules.json"), "utf8")).length;
+  const coreHeaders = JSON.parse(fs.readFileSync(path.join(OUT_DIR, "headers_rules.json"), "utf8")).length;
+  const coreRules = JSON.parse(fs.readFileSync(path.join(OUT_DIR, "rules.json"), "utf8")).length;
+  let used = coreEasy + corePrivacy + coreHeaders + coreRules;
+  for (const id of DEFAULT_PRIORITY) {
+    const entry = perListRules[id];
+    if (!entry) continue;
+    if (used + entry.count <= STATIC_RULES_BUDGET_SAFETY) {
+      used += entry.count;
+      defaultEnableIds.add(id);
+    }
+  }
+  console.log(`Default static budget used: ${used}/${STATIC_RULES_BUDGET}`);
+  // Write per-list chunked files and index
+  for (const [id, entry] of Object.entries(perListRules)) {
+    const chunks = chunkArray(entry.rules, MAX_STATIC_RULES_PER_FILE);
+    const fileIds = [];
+    const fileNames = [];
+    const counts = [];
+    chunks.forEach((chunk, idx) => {
+      const fname = `rules_opt_${id}_p${idx + 1}.json`;
+      writeJson(fname, chunk);
+      const rid = `quiet_opt_${id}_p${idx + 1}`;
+      fileIds.push(rid);
+      fileNames.push(fname);
+      counts.push(chunk.length);
+    });
+    rulesetIndex[id] = {
+      ids: fileIds,
+      files: fileNames,
+      counts,
+      total: entry.count,
+      title: entry.title,
+      defaultEnabled: defaultEnableIds.has(id)
+    };
+    console.log(`  ${id}: ${entry.count} rules (${fileNames.join(", ")}) ${defaultEnableIds.has(id) ? "[default]" : ""}`);
+  }
+  for (const opt of OPTIONAL_LISTS) {
+    if (!rulesetIndex[opt.id]) {
+      console.warn(`  Skipped ${opt.id}: no data`);
     }
   }
   writeJson("ruleset_index.json", rulesetIndex);
@@ -199,7 +289,7 @@ async function main() {
     filtered.push({ id: "quiet_headers", enabled: true, path: "headers_rules.json" });
     for (const [optId, info] of Object.entries(rulesetIndex)) {
       info.ids.forEach((rid, i) => {
-        filtered.push({ id: rid, enabled: false, path: info.files[i] });
+        filtered.push({ id: rid, enabled: !!info.defaultEnabled, path: info.files[i] });
       });
     }
     manifest.declarative_net_request = { ...(manifest.declarative_net_request || {}), rule_resources: filtered };
@@ -225,7 +315,7 @@ async function main() {
       filtered.push({ id: "quiet_headers", enabled: true, path: "headers_rules.json" });
       for (const info of Object.values(rulesetIndex)) {
         info.ids.forEach((rid, i) => {
-          filtered.push({ id: rid, enabled: false, path: info.files[i] });
+          filtered.push({ id: rid, enabled: !!info.defaultEnabled, path: info.files[i] });
         });
       }
       ff.declarative_net_request = { ...(ff.declarative_net_request || {}), rule_resources: filtered };

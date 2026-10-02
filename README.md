@@ -21,7 +21,9 @@ Manifest V3, **zero data collection**. Everything runs locally on your device.
 ## What it does
 
 **Blocking**
-- EasyList + EasyPrivacy with auto-updates; optional Fanboy / Cookie / regional lists
+- EasyList + EasyPrivacy with auto-updates
+- Additional default static rulesets (enabled): uBO Filters, uBO Privacy, uBO Quick Fixes, AdGuard Base, AdGuard Tracking, Peter Lowe’s (auto-trimmed to stay within Chrome’s static DNR budget; overflow lists remain optional toggles)
+- Optional Fanboy / Cookie / regional lists
 - Cosmetics, `:has()` empty-ad collapse, element zapper, YouTube + scriptlet catalog
 - Per-site modes: full / allow ads / pause · Fix this site · cookie reject-then-hide
 - CNAME uncloaking map for known first-party tracker aliases
@@ -70,7 +72,7 @@ Runs packaging smoke checks (`tools/validate_extension.js`) and unit tests for
 ## License
 
 - **QuietBrowse code:** [GPL-3.0](LICENSE)
-- **EasyList-family lists:** CC BY-SA 3.0 / GPL-3.0 — [ATTRIBUTION.md](ATTRIBUTION.md)
+- **Filter lists (EasyList, EasyPrivacy, AdGuard, uBO uAssets, Peter Lowe):** GPL-3.0 and/or CC BY-SA 3.0 — see [ATTRIBUTION.md](ATTRIBUTION.md)
 
 ## Store / release
 

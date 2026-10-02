@@ -64,6 +64,41 @@ const DEFAULT_FILTER_URLS = [
 // Fanboy Annoyance already includes Cookie + Social — prefer one or the other.
 const OPTIONAL_FILTER_LISTS = [
   {
+    id: "adguard-base",
+    title: "AdGuard Base",
+    url: "https://filters.adtidy.org/extension/ublock/filters/2.txt",
+    defaultEnabled: true,
+    note: "General ads/tracking; complements EasyList"
+  },
+  {
+    id: "adguard-tracking",
+    title: "AdGuard Tracking Protection",
+    url: "https://filters.adtidy.org/extension/ublock/filters/3.txt",
+    defaultEnabled: true,
+    note: "Tracker blocking; complements EasyPrivacy"
+  },
+  {
+    id: "peterlowe",
+    title: "Peter Lowe’s ad/tracking list",
+    url: "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext",
+    defaultEnabled: true,
+    note: "Domain-based blocklist"
+  },
+  {
+    id: "ublock-filters",
+    title: "uBlock Origin – Filters",
+    url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
+    defaultEnabled: true,
+    note: "Base uBO list"
+  },
+  {
+    id: "ublock-privacy",
+    title: "uBlock Origin – Privacy",
+    url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
+    defaultEnabled: true,
+    note: "uBO privacy list"
+  },
+  {
     id: "ubo-quick-fixes",
     title: "Quick Fixes (uBlock Assets)",
     url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt",

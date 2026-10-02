@@ -40,6 +40,27 @@ If you modify and redistribute compiled rules, you must:
 
 > QuietBrowse uses filter lists from the EasyList project (easylist.to). EasyList and EasyPrivacy are copyright their respective authors and licensed under the Creative Commons Attribution-ShareAlike 3.0 Unported license and GNU General Public License v3.0. Compiled rule files in this extension are derived from those lists. Source code for QuietBrowse is available under GPL-3.0; see the project repository for full license text.
 
+## AdGuard filters
+
+| List | Source | License |
+|------|--------|---------|
+| AdGuard Base | https://filters.adtidy.org/extension/ublock/filters/2.txt | [GPL-3.0](https://github.com/AdguardTeam/AdguardFilters/blob/master/LICENSE) |
+| AdGuard Tracking Protection | https://filters.adtidy.org/extension/ublock/filters/3.txt | [GPL-3.0](https://github.com/AdguardTeam/AdguardFilters/blob/master/LICENSE) |
+
+## uBlock Origin (uAssets)
+
+| List | Source | License |
+|------|--------|---------|
+| uBO Filters | https://github.com/uBlockOrigin/uAssets/blob/master/filters/filters.txt | [GPL-3.0](https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE) |
+| uBO Privacy | https://github.com/uBlockOrigin/uAssets/blob/master/filters/privacy.txt | [GPL-3.0](https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE) |
+| Quick Fixes | https://github.com/uBlockOrigin/uAssets/blob/master/filters/quick-fixes.txt | [GPL-3.0](https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE) |
+
+## Peter Lowe’s ad/tracking list
+
+| List | Source | License |
+|------|--------|---------|
+| Peter Lowe | https://pgl.yoyo.org/adservers/ | [GPL-3.0](https://pgl.yoyo.org/adservers/) |
+
 ## QuietBrowse original code
 
 Original source files (not listed above) are © QuietBrowse contributors and

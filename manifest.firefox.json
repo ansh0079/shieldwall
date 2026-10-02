@@ -91,8 +91,53 @@
         "path": "headers_rules.json"
       },
       {
-        "id": "quiet_opt_ubo-quick-fixes_p1",
+        "id": "quiet_opt_adguard-base_p1",
+        "enabled": true,
+        "path": "rules_opt_adguard-base_p1.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p1",
         "enabled": false,
+        "path": "rules_opt_adguard-tracking_p1.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p2",
+        "enabled": false,
+        "path": "rules_opt_adguard-tracking_p2.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p3",
+        "enabled": false,
+        "path": "rules_opt_adguard-tracking_p3.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p4",
+        "enabled": false,
+        "path": "rules_opt_adguard-tracking_p4.json"
+      },
+      {
+        "id": "quiet_opt_adguard-tracking_p5",
+        "enabled": false,
+        "path": "rules_opt_adguard-tracking_p5.json"
+      },
+      {
+        "id": "quiet_opt_peterlowe_p1",
+        "enabled": true,
+        "path": "rules_opt_peterlowe_p1.json"
+      },
+      {
+        "id": "quiet_opt_ublock-filters_p1",
+        "enabled": true,
+        "path": "rules_opt_ublock-filters_p1.json"
+      },
+      {
+        "id": "quiet_opt_ublock-privacy_p1",
+        "enabled": true,
+        "path": "rules_opt_ublock-privacy_p1.json"
+      },
+      {
+        "id": "quiet_opt_ubo-quick-fixes_p1",
+        "enabled": true,
         "path": "rules_opt_ubo-quick-fixes_p1.json"
       },
       {
