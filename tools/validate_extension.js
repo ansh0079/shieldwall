@@ -70,6 +70,21 @@ function validateManifest() {
     manifest.host_permissions.includes("<all_urls>"),
     "general blocker must declare <all_urls>"
   );
+
+  // Ensure the store description length fits Chrome's 132-char limit after i18n resolution.
+  const rawDesc = manifest.description || "";
+  let resolvedDesc = rawDesc;
+  const m = /^__MSG_([^_]+)__$/.exec(rawDesc);
+  if (m) {
+    const messages = parseJson("_locales/en/messages.json");
+    const entry = messages?.[m[1]];
+    assert(entry && typeof entry.message === "string", `missing i18n key for description: ${m[1]}`);
+    resolvedDesc = entry.message;
+  }
+  assert(
+    resolvedDesc.length <= 132,
+    `manifest description too long (${resolvedDesc.length} > 132): "${resolvedDesc}"`
+  );
 }
 
 function validateRules() {
