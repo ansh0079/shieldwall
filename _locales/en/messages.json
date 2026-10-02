@@ -399,6 +399,10 @@
     "message": "Fix this site",
     "description": "Popup button label."
   },
+  "popupAllowAdsQuick": {
+    "message": "Allow ads on this site",
+    "description": "Quick option in popup to set site mode to Allow ads."
+  },
   "popupSaveLocalReport": {
     "message": "Save local report",
     "description": "Popup checkbox label."

@@ -473,7 +473,7 @@ function renderFilterLists() {
 
     const removeBtn = document.createElement("button");
     removeBtn.className = "btn-sm danger";
-    removeBtn.textContent = "Remove";
+    removeBtn.textContent = i18n("btnRemove");
     removeBtn.onclick = () => {
       chrome.runtime.sendMessage(
         { type: "removeCustomFilterList", id: list.id },
@@ -859,7 +859,7 @@ function renderZapped() {
         (z.addedAt ? `<div class="item-meta">${i18n("zappedAddedAt", formatDate(z.addedAt))}</div>` : "");
       const btn = document.createElement("button");
       btn.className = "btn-sm danger";
-      btn.textContent = "Remove";
+    btn.textContent = i18n("btnRemove");
       btn.onclick = () => {
         chrome.runtime.sendMessage(
           { type: "removeZapped", domain, index },

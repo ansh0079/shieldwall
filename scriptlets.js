@@ -8,11 +8,23 @@
   if (window.__qbYT) return;
   window.__qbYT = true;
 
+  // Ad-related keys commonly observed in YouTube player payloads.
+  // Keep this list conservative and purely subtractive to avoid breaking playback.
   const AD_KEYS = [
     "adPlacements",
     "adSlots",
     "playerAds",
-    "adBreakHeartbeatParams"
+    "adBreakHeartbeatParams",
+    "adBreaks",
+    "adSignals",
+    "adSafetyReasons",
+    "adLayoutLoggingStrings",
+    "adSlotLoggingUrls",
+    "preroll",
+    "adDeviceSignals",
+    "adInfos",
+    "adTrackingParams",
+    "adPlacementsDebug"
   ];
 
   function prune(obj) {
@@ -22,6 +34,15 @@
           if (key in obj) delete obj[key];
         }
         if (obj.playerResponse) prune(obj.playerResponse);
+        if (Array.isArray(obj)) {
+          for (const item of obj) prune(item);
+        } else {
+          // Shallowly walk nested objects one level to catch ad blobs under alternate containers.
+          for (const k in obj) {
+            const v = obj[k];
+            if (v && typeof v === "object") prune(v);
+          }
+        }
       }
     } catch {
       /* never break the page */
@@ -48,4 +69,7 @@
     }
   }, 500);
   setTimeout(() => clearInterval(sweep), 10000);
+
+  // Expose for unit tests (no effect on pages).
+  try { window.__qbYT_prune = prune; } catch {}
 })();

@@ -18,6 +18,7 @@ const zapBtn = document.getElementById("zapBtn");
 const fixSiteBtn = document.getElementById("fixSiteBtn");
 const reportCheck = document.getElementById("reportCheck");
 const optionsLink = document.getElementById("optionsLink");
+const allowAdsBtn = document.getElementById("allowAdsBtn");
 const promoSection = document.getElementById("promo");
 const reviewPromptEl = document.getElementById("reviewPrompt");
 const reviewCtaBtn = document.getElementById("reviewCta");
@@ -76,6 +77,7 @@ async function init() {
     siteRow.classList.add("disabled");
     zapBtn.disabled = true;
     fixSiteBtn.disabled = true;
+    allowAdsBtn.disabled = true;
   }
 
   const data = await chrome.storage.local.get({
@@ -407,4 +409,9 @@ zapBtn.addEventListener("click", () => {
       flashHint(i18n("hintCantZap"));
     }
   });
+});
+
+allowAdsBtn.addEventListener("click", () => {
+  if (!currentDomain) return;
+  applySiteMode("ads");
 });
