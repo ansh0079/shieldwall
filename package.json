@@ -1,5 +1,20 @@
 {
   "name": "quietbrowse",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Local-only ad & tracker blocker (QuietBrowse) — dev scripts",
+  "license": "GPL-3.0",
+  "scripts": {
+    "test": "node tools/validate_extension.js && node tools/test_unit.js",
+    "validate": "node tools/validate_extension.js",
+    "pack": "node tools/pack.js",
+    "pack:firefox": "node tools/pack.firefox.js",
+    "pack:edge": "node tools/pack.edge.js"
+  }
+}
+
+{
+  "name": "quietbrowse",
   "version": "4.6.4",
   "private": true,
   "description": "Privacy-first ad and tracker blocker (Chrome / Edge / Brave / Firefox)",
