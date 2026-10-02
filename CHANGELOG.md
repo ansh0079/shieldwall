@@ -2,6 +2,12 @@
 
 All notable changes to QuietBrowse are documented here.
 
+## [4.7.0] — 2026-10-02
+
+### Fixed
+- **Chrome unpacked load failure** — the filter compiler emitted 12 DNR rules whose `urlFilter` started with `||*` (9 in AdGuard Base, 3 in AdGuard Tracking Protection), which Chrome's parser rejects. The compiler now drops patterns Chrome cannot load, the bundled rulesets were cleaned (`node tools/sanitize_rulesets.js`), and `tools/validate_extension.js` fails the build if any static rule has an invalid condition.
+- **Firefox manifest version** — `manifest.firefox.json` was still at 4.6.5; it now matches 4.7.0, and validation checks the versions stay in sync.
+
 ## [4.6.4] — 2026-07-20
 
 ### Changed

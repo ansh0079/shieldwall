@@ -220,6 +220,9 @@ async function main() {
         ...cc.blockRules.map((r, i) => ({ ...r, id: BLOCK_ID_START + i })),
         ...(cc.paramRules || []).map((r, i) => ({ ...r, id: PARAM_ID_BASE + i }))
       ];
+      if (cc.stats?.invalidUrlFilters) {
+        console.log(`  ${opt.id}: dropped ${cc.stats.invalidUrlFilters} pattern(s) Chrome DNR rejects`);
+      }
       perListRules[opt.id] = {
         rules,
         count: rules.length,

@@ -110,6 +110,37 @@ function validateRules() {
   assert(elCount + epCount >= 12000, `Combined EasyList/EasyPrivacy rule count too low: ${elCount + epCount}`);
 }
 
+// Every static ruleset referenced by the manifests must load in Chrome: a single
+// rule Chrome's DNR parser rejects (e.g. urlFilter "||*foo") breaks the build.
+function validateAllRulesetConditions() {
+  const { dnrRuleError } = require(path.join(ROOT, "filter_compiler.js"));
+  const files = new Set();
+  for (const m of ["manifest.json", "manifest.firefox.json"]) {
+    if (!fs.existsSync(path.join(ROOT, m))) continue;
+    for (const r of parseJson(m).declarative_net_request?.rule_resources || []) files.add(r.path);
+  }
+  assert(files.size > 0, "manifest must declare DNR rule_resources");
+  const problems = [];
+  for (const rel of files) {
+    assert(fs.existsSync(path.join(ROOT, rel)), `rule_resources path missing: ${rel}`);
+    const rules = parseJson(rel);
+    assert(Array.isArray(rules), `${rel} must be a JSON array`);
+    const ids = new Set();
+    for (const rule of rules) {
+      if (!Number.isInteger(rule.id) || rule.id < 1) problems.push(`${rel}: invalid id ${rule.id}`);
+      else if (ids.has(rule.id)) problems.push(`${rel}: duplicate id ${rule.id}`);
+      ids.add(rule.id);
+      const err = dnrRuleError(rule);
+      if (err) problems.push(`${rel} rule ${rule.id}: ${err} (${JSON.stringify(rule.condition?.urlFilter ?? "")})`);
+    }
+  }
+  assert(
+    problems.length === 0,
+    `${problems.length} DNR rule(s) Chrome would reject:\n  ${problems.slice(0, 20).join("\n  ")}` +
+      "\nRun: node tools/sanitize_rulesets.js"
+  );
+}
+
 function validateFirefoxManifest() {
   const ffPath = "manifest.firefox.json";
   if (!fs.existsSync(path.join(ROOT, ffPath))) return; // optional — Chrome-only build is fine
@@ -118,6 +149,16 @@ function validateFirefoxManifest() {
   assert(
     typeof geckoId === "string" && geckoId.length > 0,
     "manifest.firefox.json must declare browser_specific_settings.gecko.id"
+  );
+  const chromeVersion = parseJson("manifest.json").version;
+  assert(
+    ff.version === chromeVersion,
+    `manifest.firefox.json version (${ff.version}) must match manifest.json (${chromeVersion})`
+  );
+  const pkgVersion = parseJson("package.json").version;
+  assert(
+    pkgVersion === chromeVersion,
+    `package.json version (${pkgVersion}) must match manifest.json (${chromeVersion})`
   );
   assert(
     geckoId !== "quietbrowse@local",
@@ -343,6 +384,7 @@ async function main() {
   validateJsonFiles();
   validateManifest();
   validateRules();
+  validateAllRulesetConditions();
   validatePrivacyClaims();
   validateFilterCompiler();
   validateI18nCoverage();
