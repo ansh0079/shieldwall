@@ -43,6 +43,21 @@ Manifest V3, **zero data collection**. Everything runs locally on your device.
 1. Copy `manifest.firefox.json` over `manifest.json` (or load it via your packaging step)
 2. `about:debugging` → This Firefox → Load Temporary Add-on → pick `manifest.json`
 
+## Builds (packs for stores)
+
+Chrome / Edge (same package):
+
+```bash
+node tools/pack.js               # writes quietbrowse.zip for Chrome Web Store
+node tools/pack.edge.js          # writes quietbrowse-edge.zip (identical content)
+```
+
+Firefox (separate XPI using `manifest.firefox.json`):
+
+```bash
+node tools/pack.firefox.js       # writes quietbrowse-firefox.xpi for AMO
+```
+
 ## Tests
 
 ```bash
