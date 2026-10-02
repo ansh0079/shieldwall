@@ -25,6 +25,9 @@ const OUT_DIR = path.join(__dirname, "..");
 const BLOCK_ID_START = 50000;
 const PARAM_ID_BASE = 200000; // keep unique within the file
 const MAX_STATIC_RULES_PER_FILE = 25000;
+// Keep each generated static rules file comfortably under AMO's 5 MB limit.
+// Target ~4 MiB to leave headroom for JSON overhead and future growth.
+const MAX_STATIC_RULES_BYTES = 4 * 1024 * 1024;
 const STATIC_RULES_BUDGET = 30000; // Chrome guaranteed minimum
 const STATIC_RULES_BUDGET_SAFETY = 29500; // leave some headroom
 
@@ -110,6 +113,48 @@ function chunkArray(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
+}
+
+/**
+ * Split an array of rule objects into chunks which satisfy both:
+ *  - rule count per file <= MAX_STATIC_RULES_PER_FILE
+ *  - JSON byte size per file < MAX_STATIC_RULES_BYTES
+ *
+ * This prevents AMO FILE_TOO_LARGE errors (5 MB hard limit).
+ */
+function chunkRulesByLimits(rules, {
+  maxCount = MAX_STATIC_RULES_PER_FILE,
+  maxBytes = MAX_STATIC_RULES_BYTES
+} = {}) {
+  const chunks = [];
+  let current = [];
+  // Pre-calc overhead for empty array brackets/newlines to be conservative.
+  const EMPTY_ARRAY_OVERHEAD = 2; // "[]"
+  for (const rule of rules) {
+    const candidate = current.length === 0 ? [rule] : [...current, rule];
+    // Enforce rule-count limit first
+    if (candidate.length > maxCount) {
+      chunks.push(current);
+      current = [rule];
+      continue;
+    }
+    // Enforce byte-size limit using precise JSON length
+    const bytes = Buffer.byteLength(JSON.stringify(candidate)) + EMPTY_ARRAY_OVERHEAD;
+    if (bytes >= maxBytes) {
+      if (current.length === 0) {
+        // Single very large rule; still emit it to avoid infinite loop.
+        chunks.push([rule]);
+        current = [];
+      } else {
+        chunks.push(current);
+        current = [rule];
+      }
+    } else {
+      current = candidate;
+    }
+  }
+  if (current.length) chunks.push(current);
+  return chunks;
 }
 
 function pruneTextBySeen(text, seen) {
@@ -251,7 +296,7 @@ async function main() {
   console.log(`Default static budget used: ${used}/${STATIC_RULES_BUDGET}`);
   // Write per-list chunked files and index
   for (const [id, entry] of Object.entries(perListRules)) {
-    const chunks = chunkArray(entry.rules, MAX_STATIC_RULES_PER_FILE);
+    const chunks = chunkRulesByLimits(entry.rules);
     const fileIds = [];
     const fileNames = [];
     const counts = [];
