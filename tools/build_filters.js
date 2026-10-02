@@ -1,8 +1,10 @@
 // QuietBrowse - filter list build script
 // Downloads EasyList + EasyPrivacy and compiles them (via ../filter_compiler.js) into:
-//   easylist_rules.json  - declarativeNetRequest network rules
+//   easylist_rules.json  - declarativeNetRequest network rules (incl. $removeparam)
 //   cosmetic_filters.js  - generic element-hiding selectors + bundled procedural rules
 //   cosmetic_sites.json  - per-site hide/unhide selector maps
+// Also builds static optional rulesets (Fanboy/EasyList regionals, uBO quick-fixes)
+// as separate files and updates manifest.rule_resources.
 //
 // Usage:  node tools/build_filters.js [easylist.txt easyprivacy.txt]
 // (Pass local files to skip the download.)
@@ -21,6 +23,41 @@ const OUT_DIR = path.join(__dirname, "..");
 
 // Must match background.js: allow rules 1.., block rules 50000..
 const BLOCK_ID_START = 50000;
+const PARAM_ID_BASE = 200000; // keep unique within the file
+const MAX_STATIC_RULES_PER_FILE = 25000;
+
+const OPTIONAL_LISTS = [
+  {
+    id: "ubo-quick-fixes",
+    title: "Quick Fixes (uBlock Assets)",
+    url: "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt"
+  },
+  {
+    id: "fanboy-annoyance",
+    title: "Fanboy's Annoyance List",
+    url: "https://easylist.to/easylist/fanboy-annoyance.txt"
+  },
+  {
+    id: "easylist-cookie",
+    title: "EasyList Cookie List",
+    url: "https://secure.fanboy.co.nz/fanboy-cookiemonster.txt"
+  },
+  {
+    id: "fanboy-social",
+    title: "Fanboy's Social Blocking List",
+    url: "https://easylist.to/easylist/fanboy-social.txt"
+  },
+  {
+    id: "easylist-germany",
+    title: "EasyList Germany",
+    url: "https://easylist.to/easylistgermany/easylistgermany.txt"
+  },
+  {
+    id: "easylist-france",
+    title: "EasyList France",
+    url: "https://easylist.to/easylistfrance/easylistfrance.txt"
+  }
+];
 
 function download(url) {
   return new Promise((resolve, reject) => {
@@ -36,6 +73,16 @@ function download(url) {
       res.on("end", () => resolve(data));
     }).on("error", reject);
   });
+}
+
+function writeJson(relPath, data) {
+  fs.writeFileSync(path.join(OUT_DIR, relPath), JSON.stringify(data));
+}
+
+function chunkArray(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
 async function main() {
@@ -61,10 +108,8 @@ async function main() {
 
   const allowRules = c.allowRules.map((r, i) => ({ ...r, id: i + 1 }));
   const blockRules = c.blockRules.map((r, i) => ({ ...r, id: BLOCK_ID_START + i }));
-  fs.writeFileSync(
-    path.join(OUT_DIR, "easylist_rules.json"),
-    JSON.stringify([...allowRules, ...blockRules])
-  );
+  const paramRules = (c.paramRules || []).map((r, i) => ({ ...r, id: PARAM_ID_BASE + i }));
+  writeJson("easylist_rules.json", [...allowRules, ...blockRules, ...paramRules]);
 
   // Build bundled procedural rules: site-specific first (up to 2000 total)
   const MAX_PROC = 2000;
@@ -93,22 +138,90 @@ async function main() {
       ";\n"
   );
 
-  fs.writeFileSync(
-    path.join(OUT_DIR, "cosmetic_sites.json"),
-    JSON.stringify({ hide: c.siteHide, unhide: c.siteUnhide })
-  );
+  writeJson("cosmetic_sites.json", { hide: c.siteHide, unhide: c.siteUnhide });
+
+  // Build optional static rulesets
+  console.log("\nBuilding optional static rulesets...");
+  const rulesetIndex = {};
+  for (const opt of OPTIONAL_LISTS) {
+    try {
+      const text = await download(opt.url);
+      const cc = compileFilters([text], { maxBlockRules: 100000, maxAllowRules: 10000, domainsPerGroup: 1000 });
+      const rules = [
+        ...cc.allowRules.map((r, i) => ({ ...r, id: i + 1 })),
+        ...cc.blockRules.map((r, i) => ({ ...r, id: BLOCK_ID_START + i })),
+        ...(cc.paramRules || []).map((r, i) => ({ ...r, id: PARAM_ID_BASE + i }))
+      ];
+      const chunks = chunkArray(rules, MAX_STATIC_RULES_PER_FILE);
+      const fileIds = [];
+      const fileNames = [];
+      const counts = [];
+      chunks.forEach((chunk, idx) => {
+        const fname = `rules_opt_${opt.id}_p${idx + 1}.json`;
+        writeJson(fname, chunk);
+        const rid = `quiet_opt_${opt.id}_p${idx + 1}`;
+        fileIds.push(rid);
+        fileNames.push(fname);
+        counts.push(chunk.length);
+      });
+      rulesetIndex[opt.id] = { ids: fileIds, files: fileNames, counts, total: rules.length, title: opt.title };
+      console.log(`  ${opt.id}: ${rules.length} rules (${fileNames.join(", ")})`);
+    } catch (e) {
+      console.warn(`  Skipped ${opt.id}: ${e.message}`);
+    }
+  }
+  writeJson("ruleset_index.json", rulesetIndex);
+
+  // Patch manifest.rule_resources to include optional rulesets (disabled by default)
+  const manifestPath = path.join(OUT_DIR, "manifest.json");
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    const base = manifest.declarative_net_request?.rule_resources || [];
+    // Remove any previous quiet_opt_* entries
+    const filtered = base.filter((r) => typeof r.id !== "string" || !r.id.startsWith("quiet_opt_"));
+    for (const [optId, info] of Object.entries(rulesetIndex)) {
+      info.ids.forEach((rid, i) => {
+        filtered.push({ id: rid, enabled: false, path: info.files[i] });
+      });
+    }
+    manifest.declarative_net_request = { ...(manifest.declarative_net_request || {}), rule_resources: filtered };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+    console.log("Updated manifest.json rule_resources with optional rulesets");
+  } catch (e) {
+    console.warn("Could not update manifest.json:", e.message);
+  }
+  // Patch Firefox manifest if present
+  const ffManifestPath = path.join(OUT_DIR, "manifest.firefox.json");
+  try {
+    if (fs.existsSync(ffManifestPath)) {
+      const ff = JSON.parse(fs.readFileSync(ffManifestPath, "utf8"));
+      const base = ff.declarative_net_request?.rule_resources || [];
+      const filtered = base.filter((r) => typeof r.id !== "string" || !r.id.startsWith("quiet_opt_"));
+      for (const info of Object.values(rulesetIndex)) {
+        info.ids.forEach((rid, i) => {
+          filtered.push({ id: rid, enabled: false, path: info.files[i] });
+        });
+      }
+      ff.declarative_net_request = { ...(ff.declarative_net_request || {}), rule_resources: filtered };
+      fs.writeFileSync(ffManifestPath, JSON.stringify(ff, null, 2));
+      console.log("Updated manifest.firefox.json rule_resources with optional rulesets");
+    }
+  } catch (e) {
+    console.warn("Could not update manifest.firefox.json:", e.message);
+  }
 
   const s = c.stats;
   console.log(`\nCompiled:`);
   console.log(`  ${s.domainCount} blocked domains (merged into ${s.groupedRules} grouped rules)`);
   console.log(`  ${s.patternRules} pattern block rules`);
   console.log(`  ${s.allowRules} exception rules`);
+  console.log(`  ${s.paramRules || 0} $removeparam rules`);
   console.log(`  ${s.genericSelectors} generic cosmetic selectors`);
   console.log(`  ${s.siteHideDomains} domains with site-specific cosmetics`);
   console.log(`  ${s.siteUnhideDomains} domains with cosmetic exceptions`);
   console.log(`  ${s.proceduralRules} procedural rules (has-text/upward/remove) — ${procFlat.length} bundled`);
   console.log(`  ${s.skipped} unsupported rules skipped`);
-  console.log(`\nWrote easylist_rules.json, cosmetic_filters.js, cosmetic_sites.json`);
+  console.log(`\nWrote easylist_rules.json, cosmetic_filters.js, cosmetic_sites.json, ruleset_index.json + optional rulesets`);
   console.log("Reload the extension in chrome://extensions to apply.");
 }
 

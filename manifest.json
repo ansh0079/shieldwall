@@ -17,14 +17,21 @@
     "scripting",
     "unlimitedStorage"
   ],
-  "optional_permissions": ["cookies", "downloads"],
-  "host_permissions": ["<all_urls>"],
+  "optional_permissions": [
+    "cookies",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "js": [
         "utils.js",
         "phish_score.js",
@@ -52,6 +59,31 @@
         "id": "quiet_privacy",
         "enabled": true,
         "path": "privacy_rules.json"
+      },
+      {
+        "id": "quiet_opt_ubo-quick-fixes_p1",
+        "enabled": false,
+        "path": "rules_opt_ubo-quick-fixes_p1.json"
+      },
+      {
+        "id": "quiet_opt_fanboy-annoyance_p1",
+        "enabled": false,
+        "path": "rules_opt_fanboy-annoyance_p1.json"
+      },
+      {
+        "id": "quiet_opt_easylist-cookie_p1",
+        "enabled": false,
+        "path": "rules_opt_easylist-cookie_p1.json"
+      },
+      {
+        "id": "quiet_opt_fanboy-social_p1",
+        "enabled": false,
+        "path": "rules_opt_fanboy-social_p1.json"
+      },
+      {
+        "id": "quiet_opt_easylist-germany_p1",
+        "enabled": false,
+        "path": "rules_opt_easylist-germany_p1.json"
       }
     ]
   },

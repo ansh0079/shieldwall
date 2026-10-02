@@ -24,6 +24,33 @@ function defaultOptionalToggles() {
   return out;
 }
 
+let __rulesetIndexCache = null;
+async function getRulesetIndex() {
+  if (__rulesetIndexCache) return __rulesetIndexCache;
+  try {
+    const res = await fetch(chrome.runtime.getURL("ruleset_index.json"));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    __rulesetIndexCache = await res.json();
+  } catch {
+    __rulesetIndexCache = {};
+  }
+  return __rulesetIndexCache;
+}
+
+async function getAvailableStaticRuleCount() {
+  try {
+    const fn = chrome.declarativeNetRequest.getAvailableStaticRuleCount;
+    if (!fn) return null;
+    const n = await fn();
+    // Chrome returns a number; if object in future, attempt to extract a field.
+    if (typeof n === "number") return n;
+    if (n && typeof n.available === "number") return n.available;
+  } catch {
+    /* not supported on this channel */
+  }
+  return null;
+}
+
 async function readFilterResponse(res, maxBytes = MAX_FILTER_LIST_BYTES) {
   const declared = Number(res.headers?.get?.("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
@@ -73,12 +100,15 @@ async function fetchFilterList(url) {
 async function getEnabledFilterUrls() {
   const data = await chrome.storage.local.get({
     optionalFilterLists: null,
-    customFilterLists: []
+    customFilterLists: [],
+    staticEnabledOptionals: {}
   });
   const toggles = data.optionalFilterLists || defaultOptionalToggles();
   const urls = [...DEFAULT_FILTER_URLS];
+  // If a list is enabled via static rulesets, skip it in the dynamic updater to avoid duplication.
+  const staticEnabled = data.staticEnabledOptionals || {};
   for (const list of OPTIONAL_FILTER_LISTS) {
-    if (toggles[list.id]) urls.push(list.url);
+    if (toggles[list.id] && !staticEnabled[list.id]) urls.push(list.url);
   }
   for (const list of data.customFilterLists || []) {
     if (list.enabled && list.url) urls.push(list.url);
@@ -210,7 +240,11 @@ async function updateFilterLists() {
 
     const rules = [
       ...c.allowRules.map((r, i) => ({ ...r, id: UPDATE_ALLOW_ID_START + i })),
-      ...c.blockRules.map((r, i) => ({ ...r, id: UPDATE_BLOCK_ID_START + i }))
+      ...c.blockRules.map((r, i) => ({ ...r, id: UPDATE_BLOCK_ID_START + i })),
+      ...(c.paramRules || []).map((r, i) => ({
+        ...r,
+        id: UPDATE_BLOCK_ID_START + c.blockRules.length + i
+      }))
     ];
 
     if (enabled) {
@@ -279,11 +313,54 @@ async function setOptionalFilterList(id, enabled) {
   const known = OPTIONAL_FILTER_LISTS.some((l) => l.id === id);
   if (!known) return { ok: false, error: "Unknown list" };
   const data = await chrome.storage.local.get({
-    optionalFilterLists: defaultOptionalToggles()
+    optionalFilterLists: defaultOptionalToggles(),
+    staticEnabledOptionals: {}
   });
   const toggles = { ...(data.optionalFilterLists || defaultOptionalToggles()), [id]: !!enabled };
-  await chrome.storage.local.set({ optionalFilterLists: toggles });
-  return { ok: true, toggles };
+  const staticEnabled = { ...(data.staticEnabledOptionals || {}) };
+
+  if (!enabled) {
+    // Disable static rulesets if they were enabled
+    try {
+      const index = await getRulesetIndex();
+      const info = index[id];
+      if (info?.ids?.length) {
+        await chrome.declarativeNetRequest.updateEnabledRulesets({
+          disableRulesetIds: info.ids
+        });
+      }
+      delete staticEnabled[id];
+    } catch (e) {
+      console.warn("QuietBrowse: disable optional static failed:", e.message);
+    }
+    await chrome.storage.local.set({ optionalFilterLists: toggles, staticEnabledOptionals: staticEnabled });
+    return { ok: true, toggles };
+  }
+
+  // Try to enable as static rulesets first.
+  let enabledStatically = false;
+  try {
+    const index = await getRulesetIndex();
+    const info = index[id];
+    if (info?.ids?.length) {
+      const needed = (info.total || 0) - 0;
+      const avail = await getAvailableStaticRuleCount();
+      if (avail == null || avail >= needed) {
+        await chrome.declarativeNetRequest.updateEnabledRulesets({
+          enableRulesetIds: info.ids
+        });
+        staticEnabled[id] = true;
+        enabledStatically = true;
+      } else {
+        console.warn(`QuietBrowse: static pool low (${avail} rules left), falling back to dynamic for ${id}`);
+      }
+    }
+  } catch (e) {
+    console.warn("QuietBrowse: enable optional static failed:", e.message);
+  }
+
+  await chrome.storage.local.set({ optionalFilterLists: toggles, staticEnabledOptionals: staticEnabled });
+  return { ok: true, toggles, mode: enabledStatically ? "static" : "dynamic" };
 }
 
 async function seedSiteCosmetics(siteHide, siteUnhide) {

@@ -20,7 +20,7 @@
   };
 
   const UNSUPPORTED_OPTIONS = new Set([
-    "popup", "csp", "redirect", "redirect-rule", "rewrite", "removeparam",
+    "popup", "csp", "redirect", "redirect-rule", "rewrite",
     "replace", "badfilter", "genericblock", "generichide", "elemhide",
     "webrtc", "object-subrequest", "denyallow", "header", "permissions",
     "all", "inline-script", "inline-font", "cname"
@@ -122,7 +122,8 @@
       thirdParty: null,
       initiatorDomains: null,
       excludedInitiatorDomains: null,
-      important: false
+      important: false,
+      removeParams: null
     };
     if (!optStr) return out;
 
@@ -147,6 +148,23 @@
         if (pos.length && negd.length) return null; // mixed - skip
         if (pos.length) out.initiatorDomains = pos;
         if (negd.length) out.excludedInitiatorDomains = negd;
+      } else if (name.startsWith("removeparam=")) {
+        // Support a safe subset: plain parameter names only (no regex/wildcards).
+        // Multiple removeparam=foo,bar not in spec — lists use one per line.
+        const val = name.slice("removeparam=".length).trim();
+        if (!val) continue;
+        // Strip optional leading ? and decode common encodings.
+        const rawParam = val.replace(/^\?/, "");
+        // If wrapped like /.../ treat as unsupported (skip this rule).
+        if ((rawParam.startsWith("/") && rawParam.endsWith("/")) || rawParam.includes("*")) {
+          return null;
+        }
+        // Accept a-z 0-9 _ - only (common analytics params).
+        if (!/^[a-z0-9_-]+$/i.test(rawParam)) {
+          return null;
+        }
+        if (!out.removeParams) out.removeParams = [];
+        out.removeParams.push(rawParam);
       } else if (TYPE_MAP[name]) {
         (neg ? out.excludedTypes : out.types).add(TYPE_MAP[name]);
       } else if (UNSUPPORTED_OPTIONS.has(name)) {
@@ -312,7 +330,7 @@
 
   /**
    * Compile filter-list texts.
-   * Returns { allowRules, blockRules, genericSelectors, siteHide, siteUnhide, stats }
+   * Returns { allowRules, blockRules, paramRules, genericSelectors, siteHide, siteUnhide, stats }
    * Rules come WITHOUT ids - the caller assigns them.
    */
   function compileFilters(texts, options = {}) {
@@ -332,6 +350,7 @@
     const domainGroups = new Map();
     const patternBlockRules = [];
     const allowRules = [];
+    const paramRules = [];
     let skipped = 0;
 
     for (const text of texts) {
@@ -353,6 +372,40 @@
 
         const opts = parseOptions(optStr);
         if (!opts) { skipped++; continue; }
+
+        // $removeparam support — exception not supported (skip if exceptioned).
+        if (!isException && opts.removeParams && opts.removeParams.length) {
+          // Build a redirect with queryTransform.removeParams
+          const cond = buildCondition(opts);
+          const m = pattern.match(PURE_DOMAIN_RE);
+          const hasCondExtras =
+            opts.types.size || opts.excludedTypes.size ||
+            opts.initiatorDomains || opts.excludedInitiatorDomains || opts.important;
+          if (m && !hasCondExtras) {
+            // Group by requestDomains where possible.
+            // Build one rule per domain chunk to keep conditions simple.
+            // We'll accumulate and chunk later alongside other grouped rules if needed.
+            // For now, express using requestDomains directly.
+            paramRules.push({
+              priority: opts.important ? 3 : 1,
+              action: {
+                type: "redirect",
+                redirect: { transform: { queryTransform: { removeParams: opts.removeParams.slice(0, 8) } } }
+              },
+              condition: { requestDomains: [m[1]], ...cond }
+            });
+          } else {
+            paramRules.push({
+              priority: opts.important ? 3 : 1,
+              action: {
+                type: "redirect",
+                redirect: { transform: { queryTransform: { removeParams: opts.removeParams.slice(0, 8) } } }
+              },
+              condition: { urlFilter: pattern, ...cond }
+            });
+          }
+          continue;
+        }
 
         if (isException) {
           if (allowRules.length >= maxAllowRules) { skipped++; continue; }
@@ -404,6 +457,7 @@
     return {
       allowRules,
       blockRules: [...groupedRules, ...patternBlockRules],
+      paramRules,
       genericSelectors: [...cosmetic.genericSelectors],
       siteHide: cosmetic.siteHide,
       siteUnhide: cosmetic.siteUnhide,
@@ -415,6 +469,7 @@
         groupedRules: groupedRules.length,
         patternRules: patternBlockRules.length,
         allowRules: allowRules.length,
+        paramRules: paramRules.length,
         genericSelectors: cosmetic.genericSelectors.size,
         siteHideDomains: Object.keys(cosmetic.siteHide).length,
         siteUnhideDomains: Object.keys(cosmetic.siteUnhide).length,
