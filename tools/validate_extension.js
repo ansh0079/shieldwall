@@ -166,6 +166,32 @@ function validateFirefoxManifest() {
   );
 }
 
+function validatePackagedFileSizes() {
+  // Enforce AMO's 5 MB per-file limit on any rules JSON referenced by manifests.
+  const limitBytes = 5 * 1024 * 1024;
+  const files = new Set();
+  for (const m of ["manifest.json", "manifest.firefox.json"]) {
+    const p = path.join(ROOT, m);
+    if (!fs.existsSync(p)) continue;
+    const man = parseJson(m);
+    for (const r of man.declarative_net_request?.rule_resources || []) {
+      if (r?.path) files.add(r.path);
+    }
+  }
+  const offenders = [];
+  for (const rel of files) {
+    const full = path.join(ROOT, rel);
+    if (!fs.existsSync(full)) continue; // other validator ensures existence
+    const size = fs.statSync(full).size;
+    if (size >= limitBytes) offenders.push(`${rel} (${(size / (1024 * 1024)).toFixed(2)} MB)`);
+  }
+  assert(
+    offenders.length === 0,
+    `Rules file(s) exceed AMO 5 MB limit:\n  ${offenders.join("\n  ")}\n` +
+      "Re-split rulesets to keep individual files under ~4 MB."
+  );
+}
+
 function validatePrivacyClaims() {
   const popup = read("popup.js");
   assert(!popup.includes("google.com/s2/favicons"), "popup must not call Google favicons");
@@ -385,6 +411,7 @@ async function main() {
   validateManifest();
   validateRules();
   validateAllRulesetConditions();
+  validatePackagedFileSizes();
   validatePrivacyClaims();
   validateFilterCompiler();
   validateI18nCoverage();
