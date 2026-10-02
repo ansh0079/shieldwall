@@ -213,13 +213,20 @@ async function main() {
       const text = DEFAULT_PRIORITY.includes(opt.id)
         ? pruneTextBySeen(raw, seenLines)
         : raw;
+      const ccRaw = compileFilters([raw], { maxBlockRules: 100000, maxAllowRules: 10000, domainsPerGroup: 1000 });
       const cc = compileFilters([text], { maxBlockRules: 100000, maxAllowRules: 10000, domainsPerGroup: 1000 });
       const rules = [
         ...cc.allowRules.map((r, i) => ({ ...r, id: i + 1 })),
         ...cc.blockRules.map((r, i) => ({ ...r, id: BLOCK_ID_START + i })),
         ...(cc.paramRules || []).map((r, i) => ({ ...r, id: PARAM_ID_BASE + i }))
       ];
-      perListRules[opt.id] = { rules, count: rules.length, title: opt.title };
+      perListRules[opt.id] = {
+        rules,
+        count: rules.length,
+        title: opt.title,
+        domains: cc.stats?.domainCount || 0,
+        domainsRaw: ccRaw.stats?.domainCount || 0
+      };
     } catch (e) {
       console.warn(`  Skipped ${opt.id}: ${e.message}`);
     }
@@ -258,6 +265,8 @@ async function main() {
       files: fileNames,
       counts,
       total: entry.count,
+      domains: entry.domains || 0,
+      domainsRaw: entry.domainsRaw || 0,
       title: entry.title,
       defaultEnabled: defaultEnableIds.has(id)
     };
