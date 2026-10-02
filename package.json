@@ -1,6 +1,6 @@
 {
   "name": "quietbrowse",
-  "version": "4.6.5",
+  "version": "4.7.0",
   "private": true,
   "description": "Privacy-first ad and tracker blocker (Chrome / Edge / Brave / Firefox) — local-only dev scripts",
   "license": "GPL-3.0",
