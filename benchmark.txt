@@ -1,0 +1,47 @@
+Rule counts:
+- easylist_rules.json: 4697
+- privacy_rules.json:  9328
+- default adguard-base: 8954 (1 part) domains:14002
+- opt adguard-tracking: 102272 (5 parts) domains:91145
+- default peterlowe: 3 (1 part) domains:2382
+- default ublock-filters: 636 (1 part) domains:84
+- default ublock-privacy: 1171 (1 part) domains:74
+- default ubo-quick-fixes: 98 (1 part) domains:2
+- opt fanboy-annoyance: 3582 (1 part) domains:920
+- opt easylist-cookie: 1853 (1 part) domains:313
+- opt fanboy-social: 645 (1 part) domains:61
+- opt easylist-germany: 1984 (1 part) domains:316
+- headers_rules.json: 2
+- rules.json:         3
+Total default-enabled static rules: 24892
+Total default-enabled static rules (baseline b296dcf): 13767
+
+DNR-like simulation on 500 URLs: before blocked 500 (100.0%), after blocked 500 (100.0%)
+
+Cosmetic payload:
+- cosmetic_filters.js: 235.8 KB (generics + bundled procedural)
+- cosmetic_sites.json: 563.8 KB (per-site hide/unhide index)
+
+Simple URL probe (string matches in HTML) — AFTER:
+- https://www.cnn.com/
+  googlesyndication.com:4  doubleclick.net:3  adslot:1595  adunit:3  ad-placement:0
+- https://www.theverge.com/
+  googlesyndication.com:1  doubleclick.net:3  adslot:0  adunit:0  ad-placement:0
+- https://www.nytimes.com/
+  googlesyndication.com:0  doubleclick.net:0  adslot:0  adunit:0  ad-placement:0
+- https://www.forbes.com/
+  googlesyndication.com:0  doubleclick.net:0  adslot:0  adunit:0  ad-placement:0
+- https://www.youtube.com/
+  googlesyndication.com:0  doubleclick.net:0  adslot:0  adunit:0  ad-placement:0
+
+Simple URL probe — BEFORE (baseline fetch uses same HTTP so values are for reference):
+- https://www.cnn.com/
+  googlesyndication.com:4  doubleclick.net:3  adslot:1595  adunit:3  ad-placement:0
+- https://www.theverge.com/
+  googlesyndication.com:1  doubleclick.net:3  adslot:0  adunit:0  ad-placement:0
+- https://www.nytimes.com/
+  googlesyndication.com:0  doubleclick.net:0  adslot:0  adunit:0  ad-placement:0
+- https://www.forbes.com/
+  googlesyndication.com:0  doubleclick.net:0  adslot:0  adunit:0  ad-placement:0
+- https://www.youtube.com/
+  googlesyndication.com:0  doubleclick.net:0  adslot:0  adunit:0  ad-placement:0
