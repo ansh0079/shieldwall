@@ -14,6 +14,8 @@ whether the store they're on can be trusted. Separate from QuietBrowse; shares n
 | UK company number in footer verified (exists, active, age, name matches) | Companies House API | yes (free) |
 | Links to Trustpilot, ScamAdviser, Reddit, Google, WHOIS | deep links | no |
 
+**Hover cards:** on Google/Bing/DuckDuckGo results, hovering a result shows the seller site's quick rating in a side card (domain of the hovered result only; link redirects are unwrapped). Not verified against live Google Shopping markup.
+
 Score = 50 + sum of signal points, clamped to 0-100. 70+ trusted, 40-69 caution, below 40 risky.
 A Safe Browsing hit caps the score at 10. Risky pages get an in-page warning banner.
 

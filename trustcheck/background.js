@@ -106,6 +106,10 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.type === "scan" && sender.tab) {
     pageScans.set(sender.tab.id, msg.scan);
     refresh(sender.tab.id, sender.tab.url, false);
+  } else if (msg.type === "lookup") {
+    // Hover lookup from a search page: quick check of one result's domain (no page scan available).
+    analyze(msg.url, -1, false).then((r) => reply(r && { ...r, quick: true })).catch(() => reply(null));
+    return true;
   } else if (msg.type === "submitReport") {
     (async () => {
       try {
