@@ -1,0 +1,14 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>TrustCheck options</title>
+<style>body{font:14px system-ui;max-width:560px;margin:30px auto;padding:0 16px}label{display:block;margin:16px 0 4px;font-weight:600}input{width:100%;padding:6px;box-sizing:border-box}small{color:#666}</style></head>
+<body>
+<h1>TrustCheck options</h1>
+<label for="sb">Google Safe Browsing API key</label>
+<input id="sb" type="password" autocomplete="off">
+<small>Free key from Google Cloud Console. Enables malware/phishing blocklist checks. The site's URL is sent to Google when set.</small>
+<label for="tp">Trustpilot API key</label>
+<input id="tp" type="password" autocomplete="off">
+<small>Enables live Trustpilot score. The site's domain is sent to Trustpilot when set.</small>
+<p><button id="save">Save</button> <span id="ok"></span></p>
+<p><small>Keys are stored only in this browser. Without keys, TrustCheck uses local checks and public domain-age lookups (domain name sent to rdap.org).</small></p>
+<script src="options.js"></script></body></html>

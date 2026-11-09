@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "TrustCheck - Safe Shopping Advisor",
+  "version": "0.1.0",
+  "description": "Real-time trust score, seller reviews and scam warnings for any online store you visit.",
+  "minimum_chrome_version": "110",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://rdap.org/*",
+    "https://safebrowsing.googleapis.com/*",
+    "https://api.trustpilot.com/*"
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": { "default_title": "TrustCheck", "default_popup": "popup.html" },
+  "options_page": "options.html"
+}
