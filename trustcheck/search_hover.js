@@ -163,7 +163,7 @@
       const rect = hit.card.getBoundingClientRect();
       if (!hit.url) {
         console.debug("[TrustCheck] could not read a seller website from this result. Links seen:", hit.hrefs);
-        return note(rect, "This listing doesn't show one seller's website (it may have several sellers). Click the product, then hover a seller in the panel to see its rating.");
+        return note(rect, "Google doesn't include the shop's link in this listing. Click it, then hover the seller in the panel on the right to see its rating.");
       }
       let domain; try { domain = new URL(hit.url).hostname.replace(/^www\./, ""); } catch { return; }
       note(rect, `Checking ${domain}...`);
