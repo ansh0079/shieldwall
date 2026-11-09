@@ -68,7 +68,7 @@
       .v{font-weight:700}.d{color:#6b7280;font-size:11px;word-break:break-all}
       .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin:10px 0 3px}
       .p{display:flex;gap:6px;margin:4px 0}.p i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px;background:#9ca3af}
-      .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.n{color:#6b7280;font-size:11px;margin-top:8px}`;
+      .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.n{color:#6b7280;font-size:11px;margin-top:8px}.m{color:#374151;line-height:1.4}`;
     const c = document.createElement("div"); c.className = "c";
     build(c); shadow.append(st, c);
     host.style.display = "block";
@@ -89,7 +89,7 @@
       c.append(el("div", "n", "Quick check from the seller's web address. Open the shop for a full check."));
     });
   }
-  function note(rect, text) { show(rect, (c) => c.append(el("div", "d", text))); }
+  function note(rect, text) { show(rect, (c) => c.append(el("div", "m", text))); }
 
   // Hold Alt while hovering: shows what the page contains around the pointer (for diagnosing unreadable listings).
   function debugCard(el) {
@@ -122,7 +122,7 @@
       const rect = hit.card.getBoundingClientRect();
       if (!hit.url) {
         console.debug("[TrustCheck] could not read a seller website from this result. Links seen:", hit.hrefs);
-        return note(rect, "TrustCheck can't read this seller's website from the listing. Open the shop to see its rating.");
+        return note(rect, "This listing doesn't show one seller's website (it may have several sellers). Click the product, then hover a seller in the panel to see its rating.");
       }
       let domain; try { domain = new URL(hit.url).hostname.replace(/^www\./, ""); } catch { return; }
       note(rect, `Checking ${domain}...`);
