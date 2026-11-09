@@ -59,6 +59,7 @@
   // Feedback points: buyer-report tags when available (r.feedback), then review-site score, then key findings.
   function feedbackPoints(r) {
     const pts = [];
+    if (r.buyerTotal) pts.push({ status: "info", text: `Based on ${r.buyerTotal} buyer reports (30 days)` });
     for (const f of r.feedback || []) pts.push({ status: "bad", text: `${f.count} buyers: ${f.label}` });
     if (r.reviews) pts.push({ status: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad",
       text: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
@@ -165,10 +166,11 @@
 
     const reasons = document.createElement("ul");
     const pts = [];
+    if (r.buyerTotal) pts.push({ status: "bad", text: `${r.buyerTotal} buyers reported on this shop in the last 30 days:` });
     for (const f of r.feedback || []) pts.push({ status: "bad", text: `${f.count} buyers: ${f.label}` });
     if (r.reviews) pts.push({ status: r.reviews.score >= 3 ? "warn" : "bad", text: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
     for (const sg of r.signals) if (sg.status === "bad" || sg.status === "warn") pts.push({ status: sg.status, text: sg.label });
-    for (const pt of pts.slice(0, 4)) {
+    for (const pt of pts.slice(0, 6)) {
       const li = document.createElement("li"); if (pt.status === "warn") li.className = "warn";
       const i = document.createElement("i"), t = document.createElement("span"); t.textContent = pt.text;
       li.append(i, t); reasons.append(li);

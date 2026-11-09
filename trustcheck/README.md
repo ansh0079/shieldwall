@@ -26,3 +26,17 @@ services. Keys and cached results stay in `chrome.storage.local`. No developer s
 
 ## Roadmap
 Own backend for crowd-submitted reviews, search-result badges, checkout interstitial, Firefox build.
+
+## Buyer-report server (new)
+Buyer outcomes ("did it arrive?" + optional problem tags) are stored by a small dependency-free Node server.
+
+```bash
+node server/server.js            # PORT=8787 DATA_FILE=data.json MIN_REPORTS=3 RATE_LIMIT=20
+node server/seed.js http://localhost:8787 <domain>   # DEMO ONLY: synthetic reports to preview the UI
+```
+Then set the server URL in the extension's Options. Reports are one per anonymous install per shop,
+validated against a fixed tag list, rate-limited per IP, and only shown once `MIN_REPORTS` independent
+buyers have reported in the last 30 days. Counts feed the score, the badge hover list and the checkout warning.
+
+Not production-ready: no auth/abuse detection beyond the above, a JSON file for storage, IP rate limiting
+that is unreliable behind proxies, and no shop dispute process. Seeded data is fake - never ship it.

@@ -8,8 +8,10 @@
   "host_permissions": [
     "https://rdap.org/*",
     "https://safebrowsing.googleapis.com/*",
-    "https://api.trustpilot.com/*"
+    "https://api.trustpilot.com/*",
+    "http://localhost:8787/*"
   ],
+  "optional_host_permissions": ["https://*/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [
     {
