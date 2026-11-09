@@ -26,7 +26,7 @@ Or keep the Chrome manifest for Chromium browsers. Firefox 121+ is required.
 | Service worker | `background.js` + `bg_*.js` modules |
 | Content | `content.js`, `cookie_reject.js`, `shield.js`, `zapper.js` |
 | Filters | `filter_compiler.js`, `tools/build_filters.js` |
-| UI | `popup.*`, `options.*`, `docs/index.html` |
+| UI | `popup.*`, `options.*`, `../docs/index.html` |
 
 ## Pull requests
 
