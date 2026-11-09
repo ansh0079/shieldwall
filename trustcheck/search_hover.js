@@ -89,8 +89,26 @@
   }
   function note(rect, text) { show(rect, (c) => c.append(el("div", "d", text))); }
 
+  // Hold Alt while hovering: shows what the page contains around the pointer (for diagnosing unreadable listings).
+  function debugCard(el) {
+    const lines = [];
+    let n = el;
+    for (let i = 0; n && n !== document.documentElement && i < 8; i++, n = n.parentElement) {
+      const r = n.getBoundingClientRect(), as = n.matches("a[href]") ? [n] : [...n.querySelectorAll("a[href]")];
+      lines.push(`${i}. <${n.tagName.toLowerCase()}> ${Math.round(r.width)}x${Math.round(r.height)}px, ${as.length} link(s)`);
+      if (as.length && lines.filter((l) => l.startsWith("  ")).length < 3)
+        for (const a of as.slice(0, 2)) lines.push("  " + a.href.replace(/^https?:\/\//, "").slice(0, 70) + " -> " + (destination(a) ? "OK" : "no seller"));
+    }
+    return lines;
+  }
+
   document.addEventListener("mouseover", (e) => {
     if (host && e.composedPath().includes(host)) return;
+    if (e.altKey) {
+      clearTimeout(showTimer); current = null;
+      const rect = (e.target.closest?.("a,li,article,div") || e.target).getBoundingClientRect();
+      return show(rect, (c) => { c.append(el("div", "v", "TrustCheck debug")); for (const l of debugCard(e.target)) c.append(el("div", "d", l)); });
+    }
     const hit = findCard(e.target);
     clearTimeout(showTimer);
     if (!hit) return hide();
