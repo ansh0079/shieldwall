@@ -13,8 +13,12 @@
     const isShop = hasPaymentFields ||
       !!document.querySelector('[class*="cart" i], [id*="cart" i], button[name="add"], form[action*="cart"]') ||
       /add to (cart|bag|basket)/.test(text);
+    const payFrame = !!document.querySelector('iframe[src*="paypal."], iframe[src*="klarna."], iframe[src*="clearpay."], iframe[src*="js.stripe.com"]');
+    const payButton = [...document.querySelectorAll("button, input[type=submit], a[role=button]")]
+      .some((b) => /(pay now|pay with|place (your )?order|complete (your )?(order|purchase)|buy now|paypal|klarna|clearpay)/i.test(b.textContent || b.value || ""));
+    const isCheckout = hasPaymentFields || payFrame || payButton || /\/(checkout|payment|pay)(\/|$|\?)/i.test(location.pathname);
     return {
-      isShop, hasPaymentFields,
+      isShop, hasPaymentFields, isCheckout,
       hasContact: has(/contact/) || !!document.querySelector('a[href^="mailto:"], a[href^="tel:"]'),
       hasReturns: has(/return|refund|shipping/),
       hasPrivacyTerms: has(/privacy|terms/),
@@ -117,7 +121,85 @@
     }
   }
 
+  // ---------- checkout interstitial (risky sites only) ----------
+  const ACK_MS = 24 * 3600 * 1000;
+  let overlay = null;
+  let claimed = false;   // set synchronously so concurrent reports can't show two overlays
+
+  async function maybeInterstitial(r) {
+    if (claimed || r.verdict !== "risky") return;
+    let isCheckout = false;
+    try { isCheckout = scan().isCheckout; } catch { /* ignore */ }
+    if (!isCheckout) return;
+    claimed = true;
+    const ackKey = "ack:" + r.domain;
+    try {
+      const got = (await chrome.storage.local.get(ackKey))[ackKey];
+      if (got && Date.now() - got < ACK_MS) return;       // user already chose to continue (stays claimed)
+    } catch { /* storage unavailable: show anyway */ }
+
+    overlay = document.createElement("div");
+    overlay.id = "trustcheck-interstitial";
+    overlay.style.cssText = "all:initial;position:fixed;inset:0;z-index:2147483647;";
+    const sh = overlay.attachShadow({ mode: "closed" });
+    const st = document.createElement("style");
+    st.textContent = `
+      *{box-sizing:border-box;font:14px system-ui,sans-serif}
+      .bg{position:fixed;inset:0;background:rgba(17,24,39,.82);display:grid;place-items:center;padding:16px}
+      .card{max-width:460px;width:100%;background:#fff;color:#111827;border-radius:14px;padding:22px;border-top:6px solid #dc2626;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+      h1{font-size:20px;margin:0 0 4px;color:#dc2626}.sc{color:#6b7280;margin-bottom:12px}
+      h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin:14px 0 6px}
+      ul{margin:0;padding:0;list-style:none}li{display:flex;gap:8px;margin:5px 0}
+      li i{flex:none;width:9px;height:9px;border-radius:50%;margin-top:5px;background:#dc2626}li.warn i{background:#d97706}
+      .tips li i{background:#16a34a}
+      .row{display:flex;gap:10px;margin-top:18px;align-items:center}
+      .go{flex:1;padding:11px;border:0;border-radius:8px;background:#16a34a;color:#fff;font-weight:700;font-size:15px;cursor:pointer}
+      .cont{border:0;background:none;color:#6b7280;text-decoration:underline;cursor:pointer;font-size:12px}
+      a{color:#2563eb}`;
+    const bg = document.createElement("div"); bg.className = "bg";
+    const card = document.createElement("div"); card.className = "card";
+    card.setAttribute("role", "alertdialog"); card.setAttribute("aria-label", "TrustCheck warning");
+    const add = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; card.append(e); return e; };
+    add("h1", "", "Think twice before paying here");
+    add("div", "sc", `${r.domain} scored ${r.score}/100 on TrustCheck`);
+
+    const reasons = document.createElement("ul");
+    const pts = [];
+    for (const f of r.feedback || []) pts.push({ status: "bad", text: `${f.count} buyers: ${f.label}` });
+    if (r.reviews) pts.push({ status: r.reviews.score >= 3 ? "warn" : "bad", text: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
+    for (const sg of r.signals) if (sg.status === "bad" || sg.status === "warn") pts.push({ status: sg.status, text: sg.label });
+    for (const pt of pts.slice(0, 4)) {
+      const li = document.createElement("li"); if (pt.status === "warn") li.className = "warn";
+      const i = document.createElement("i"), t = document.createElement("span"); t.textContent = pt.text;
+      li.append(i, t); reasons.append(li);
+    }
+    add("h2", "", "Why we're warning you"); card.append(reasons);
+
+    add("h2", "", "Safer steps");
+    const tips = document.createElement("ul"); tips.className = "tips";
+    const tipText = ["Pay by credit card or a protected method, not a bank transfer or gift cards",
+      "Search the shop name + \"scam\" or \"reviews\" before paying",
+      "Screenshot the listing, price and seller details"];
+    for (const t of tipText) { const li = document.createElement("li"); const i = document.createElement("i"), sp = document.createElement("span"); sp.textContent = t; li.append(i, sp); tips.append(li); }
+    card.append(tips);
+    const link = r.links?.[0];
+    if (link) { const a = document.createElement("a"); a.href = link.url; a.target = "_blank"; a.rel = "noreferrer"; a.textContent = "Check independent reviews"; const p = document.createElement("p"); p.append(a); card.append(p); }
+
+    const row = document.createElement("div"); row.className = "row";
+    const go = document.createElement("button"); go.className = "go"; go.textContent = "Go back to safety";
+    go.onclick = () => { overlay.remove(); if (history.length > 1) history.back(); else location.href = "https://www.google.com/"; };
+    const cont = document.createElement("button"); cont.className = "cont"; cont.textContent = "I understand the risk, continue";
+    cont.onclick = async () => { try { await chrome.storage.local.set({ [ackKey]: Date.now() }); } catch { /* ignore */ } overlay.remove(); };
+    row.append(go, cont); card.append(row);
+
+    bg.append(card); sh.append(st, bg);
+    document.documentElement.appendChild(overlay);
+    go.focus?.();
+  }
+
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === "report") render(msg.report);
+    if (msg.type !== "report") return;
+    render(msg.report);
+    maybeInterstitial(msg.report);
   });
 })();
