@@ -18,6 +18,11 @@ function render(r) {
     a.href = r.reviews.url; a.target = "_blank"; a.rel = "noreferrer";
     a.textContent = `${r.reviews.source}: ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews`;
     $("reviews").append(a);
+    for (const th of r.reviews.themes || []) {
+      const d = document.createElement("div");
+      d.textContent = `${th.count} of ${r.reviews.sample} recent reviews: ${th.label}`;
+      $("reviews").append(d);
+    }
   }
   $("signals").textContent = "";
   for (const s of r.signals) {

@@ -1,3 +1,4 @@
+import { summarizeThemes } from "./themes.js";
 // Network providers. Only the registrable domain is ever sent to third parties.
 const ok = async (res) => { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); };
 
@@ -40,7 +41,12 @@ export async function trustpilot(domain, key) {
   catch { return { reviews: null, signals: [] }; }
   const detail = await ok(await fetch(q(`business-units/${unit.id}`)));
   const score = detail.score?.trustScore, n = detail.numberOfReviews?.total ?? 0;
-  const reviews = { source: "Trustpilot", score, count: n, url: `https://www.trustpilot.com/review/${domain}` };
+  const reviews = { source: "Trustpilot", score, count: n, url: `https://www.trustpilot.com/review/${domain}`, themes: [], sample: 0 };
+  try { // recent reviews -> theme counts (no review text is stored or shown)
+    const rv = await ok(await fetch(q(`business-units/${unit.id}/reviews?perPage=100&orderBy=createdat.desc`)));
+    const t = summarizeThemes((rv.reviews || []).map((r) => `${r.title || ""} ${r.text || ""}`));
+    reviews.themes = t.themes; reviews.sample = t.sample;
+  } catch { /* themes are optional */ }
   let sig;
   if (n < 5) sig = { status: "info", points: 0, label: "Few or no Trustpilot reviews" };
   else if (score >= 4) sig = { status: "good", points: 18, label: `Trustpilot ${score.toFixed(1)}/5` };
