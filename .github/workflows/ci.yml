@@ -7,7 +7,7 @@ on:
     branches: [ "**" ]
 
 jobs:
-  build-and-test:
+  quietbrowse:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,8 +19,25 @@ jobs:
           node-version: '20'
 
       - name: Run validation
+        working-directory: quietbrowse
         run: node tools/validate_extension.js
 
       - name: Run unit tests
+        working-directory: quietbrowse
         run: node tools/test_unit.js
+
+  trustcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run TrustCheck tests
+        working-directory: trustcheck
+        run: npm test
 

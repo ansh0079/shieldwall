@@ -1,5 +1,5 @@
 node_modules/
-tools/ext_cache/
+quietbrowse/tools/ext_cache/
 compare_report.html
 quietbrowse*.zip
 quietbrowse*.xpi

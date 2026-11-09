@@ -14,7 +14,7 @@ See [PERMISSIONS.md](PERMISSIONS.md) for full text.
 
 ## Privacy policy URL
 
-Hosted via GitHub Pages from the `docs/` folder:
+Hosted via GitHub Pages from the repo-root `docs/` folder:
 
 `https://ansh0079.github.io/shieldwall/privacy.html`
 
@@ -22,7 +22,7 @@ Also list terms if the store asks:
 
 `https://ansh0079.github.io/shieldwall/terms.html`
 
-The same files live at the repo root (`privacy.html`, `terms.html`) for packaging; `docs/` is the public Pages copy.
+The same files live in `quietbrowse/` (`privacy.html`, `terms.html`) for packaging; the repo-root `docs/` is the public Pages copy.
 
 Regenerate rule-count bullets after filter rebuilds with:
 
