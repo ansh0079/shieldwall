@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 
 export const MIN = 60_000, HOUR = 3_600_000, DAY = 86_400_000;
 export const DEFAULTS = {
-  windowDays: 30, retentionDays: 90, halfLifeDays: 30, verifiedMultiplier: 2,
+  windowDays: 30, retentionDays: 90, halfLifeDays: 30, verifiedMultiplier: 2, maxEvaluateRows: 10000, summaryCacheMs: 30000,
   powBits: 16,
   limits: { enrollPerNetPerDay: 3, enrollPerHour: 200, reportsPerCredPerDay: 20, reportsPerNetPerHour: 30,
     newIdentityReportsPerDomainPerDay: 5, correctionsPerCredPerDomain: 3, maxCredentials: 1_000_000, maxReports: 1_000_000 },
@@ -58,12 +58,17 @@ export function detect(reports, now, cfg) {
   for (const r of reports) { if (!byNet.has(r.net)) byNet.set(r.net, []); byNet.get(r.net).push(r); }
   for (const g of byNet.values()) if (g.length >= d.netBurstMin) g.forEach((r) => flag(r, "same_network_burst"));
 
-  const sorted = [...reports].sort((a, b) => a.at - b.at);
-  if (sorted.length >= d.timingMin) {
-    for (let i = 0, j = 0; i < sorted.length; i++) {
-      while (sorted[i].at - sorted[j].at > d.timingWindowMs) j++;
-      const win = sorted.slice(j, i + 1);
-      if (win.length >= d.timingMin && new Set(win.map((r) => r.cred)).size >= d.timingMin && win.length / sorted.length >= d.timingShare) win.forEach((r) => flag(r, "timing_burst"));
+  // Timing burst, linear time: a sliding window over the time-sorted reports with running counts. (A first version sliced the
+  // window for every report, which was quadratic: 5,000 reports inside ten minutes took over a second and froze the server.)
+  const sorted = [...reports].sort((a, b) => a.at - b.at), inWin = new Map();
+  let lastMarked = -1;
+  for (let i = 0, j = 0; i < sorted.length; i++) {
+    inWin.set(sorted[i].cred, (inWin.get(sorted[i].cred) || 0) + 1);
+    while (sorted[i].at - sorted[j].at > d.timingWindowMs) { const c = sorted[j].cred, n = inWin.get(c) - 1; n ? inWin.set(c, n) : inWin.delete(c); j++; }
+    const size = i - j + 1;
+    if (size >= d.timingMin && inWin.size >= d.timingMin && size / sorted.length >= d.timingShare) {
+      for (let k = Math.max(j, lastMarked + 1); k <= i; k++) flag(sorted[k], "timing_burst");     // everything before lastMarked is already flagged
+      lastMarked = i;
     }
   }
   const young = reports.filter((r) => r.idAgeMs < d.youngDays * DAY), byPayload = new Map();

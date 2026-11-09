@@ -1,3 +1,4 @@
+// requires: node:sqlite
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -5,7 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { ReportStore, ApiError } from "../server/store.js";
 import { solvePowSync } from "../server/credentials.js";
-import { makeStore, enrollFrom, report, ipN, DAY, HOUR, MIN } from "./helpers.js";
+import { DAY, HOUR, MIN } from "./helpers.js";
+import { makeStore, enrollFrom, report, ipN, nCreds, nReports, credIds, credOf } from "./server-helpers.js";
 
 const code = (fn) => { try { fn(); return null; } catch (e) { assert.ok(e instanceof ApiError, String(e)); return e.status; } };
 const SH = "shop.example";
@@ -77,7 +79,7 @@ test("ACCEPTANCE: a botnet of brand-new identities is excluded from scoring and 
   const s = store.summary(SH);
   assert.equal(s.hidden, true); assert.equal(s.total, 40);                              // received, but not shown or scored
   assert.equal(s.problemRate, undefined);
-  const q = store.queue();
+  const q = store.queue().items;
   assert.equal(q.length, 1); assert.equal(q[0].domain, SH); assert.equal(q[0].reports.length, 40);
   assert.ok(q[0].reports.every((r) => r.reasons.length >= 1 && r.identityAgeDays < 1));
   assert.ok(store.auditLog().some((e) => e.action === "quarantine" && e.actor === "system"));
@@ -87,7 +89,7 @@ test("a botnet that waits for its identities to mature is caught by the timing b
   const toks = Array.from({ length: 40 }, (_, i) => enrollFrom(store, ipN(i))); c.tick(8 * DAY);
   toks.forEach((t, i) => { report(store, t, ipN(i)); c.tick(5_000); });                // 40 reports in ~3 minutes
   assert.equal(store.summary(SH).hidden, true);
-  const q = store.queue()[0];
+  const q = store.queue().items[0];
   assert.ok(q.reports.every((r) => r.reasons.includes("timing_burst")));
 });
 test("five brand-new identities posting an identical report are quarantined (below the velocity cap)", () => {
@@ -179,7 +181,7 @@ function quarantined() {
   return { ...ctx, toks };
 }
 test("moderators can approve, reject, restore; every action is audited", () => {
-  const { store } = quarantined(), q = store.queue()[0], ids = q.reports.map((r) => r.id);
+  const { store } = quarantined(), q = store.queue().items[0], ids = q.reports.map((r) => r.id);
   assert.equal(store.evaluate(SH).filter((r) => r.status === "scored").length, 0);
   store.moderate(ids.slice(0, 2), "approve");
   assert.equal(store.evaluate(SH).filter((r) => r.status === "scored").length, 2);         // approved reports bypass the auto rules
@@ -199,7 +201,7 @@ test("revoking a credential removes its influence and blocks further reports", (
   toks.forEach((t, i) => { report(store, t, ipN(i)); c.tick(6 * HOUR); });
   const before = store.summary(SH);
   assert.equal(before.hidden, false);
-  const id = [...store.credentials.keys()][0]; store.revokeCredential(id);
+  store.revokeCredential(credOf(toks[0]));
   assert.equal(store.evaluate(SH).filter((r) => r.status === "rejected").length, 1);
   const after = store.summary(SH);
   assert.ok(after.hidden || after.effectiveN < before.effectiveN);
@@ -211,16 +213,16 @@ test("revoking a credential removes its influence and blocks further reports", (
 // ---------------------------------------------------------------- deletion and erasure
 test("a reporter can delete their own report, and erase their identity entirely", () => {
   const { store } = makeStore(), t1 = enrollFrom(store, ipN(1)), t2 = enrollFrom(store, ipN(2));
-  const credId = JSON.parse(Buffer.from(t1.split(".")[0], "base64url").toString()).c;
+  const credId = credOf(t1);
   report(store, t1, ipN(1)); report(store, t1, ipN(1), { domain: "b.example" }); report(store, t2, ipN(2));
   store.deleteReport(t1, "b.example");
-  assert.equal(store.reports.length, 2);
+  assert.equal(nReports(store), 2);
   assert.equal(code(() => store.deleteReport(t1, "b.example")), 404);
   assert.equal(store.eraseCredential(t1).removed, 1);
-  assert.equal(store.reports.length, 1); assert.equal(store.reports[0].cred !== undefined, true);
+  assert.equal(nReports(store), 1);
   assert.equal(code(() => report(store, t1, ipN(1))), 401);                                   // the identity is gone
   assert.ok(!JSON.stringify(store.auditLog()).includes(credId), "the audit log never contains a raw credential id");
-  assert.ok(!JSON.stringify(store.reports).includes(credId) && !store.credentials.has(credId));
+  assert.ok(!credIds(store).includes(credId) && store.db.get("SELECT COUNT(*) AS n FROM reports WHERE cred = ?", credId).n === 0);
   assert.ok(store.auditLog().some((e) => e.action === "erase_credential"));
   assert.equal(store.verifyAudit().ok, true);
 });
@@ -257,33 +259,124 @@ test("disputes are rate-limited per domain", () => {
 });
 
 // ---------------------------------------------------------------- audit + persistence
-test("tampering with the stored audit log is detected", () => {
+test("the audit log is append-only in the database, and tampering that bypasses it is still detected", () => {
   const { store } = quarantined();
-  store.moderate(store.queue()[0].reports.slice(0, 1).map((r) => r.id), "reject");
+  store.moderate(store.queue().items[0].reports.slice(0, 1).map((r) => r.id), "reject");
   assert.equal(store.verifyAudit().ok, true);
-  store.audit[0].detail = "edited"; assert.equal(store.verifyAudit().ok, false);
+  assert.throws(() => store.db.run("UPDATE audit SET detail = 'edited' WHERE seq = 1"), /append-only/);
+  assert.throws(() => store.db.run("DELETE FROM audit WHERE seq = 1"), /append-only/);
+  store.db.exec("DROP TRIGGER audit_no_update");                                              // an attacker with file access removes the guard...
+  store.db.run("UPDATE audit SET detail = 'edited' WHERE seq = 1");
+  assert.equal(store.verifyAudit().ok, false); assert.equal(store.verifyAudit().brokenAt, 1);  // ...and the hash chain still exposes the edit
 });
-test("persistence: round trip, atomic file, and no IP addresses or secrets on disk", () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "tc-")), "data.json");
+test("persistence: data survives close/reopen, credentials keep working, and no IP addresses, secrets or tokens are on disk", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tc-")), file = path.join(dir, "data.db");
   const a = makeStore({ file }), toks = Array.from({ length: 3 }, (_, i) => enrollFrom(a.store, "198.51.100." + i));
   toks.forEach((t, i) => report(a.store, t, "198.51.100." + i));
-  a.store.moderate([a.store.reports[0].id], "reject"); a.store.flush();
-  const raw = fs.readFileSync(file, "utf8");
+  a.store.moderate([a.store.db.get("SELECT id FROM reports LIMIT 1").id], "reject"); a.store.close();
+  const raw = fs.readFileSync(file).toString("latin1") + (fs.existsSync(file + "-wal") ? fs.readFileSync(file + "-wal").toString("latin1") : "");
   assert.ok(!raw.includes("198.51.100") && !raw.includes("secret") && !toks.some((t) => raw.includes(t)), "no raw IPs, secrets or tokens");
-  assert.ok(!fs.existsSync(file + ".tmp"));
   const b = new ReportStore({ file, now: a.c.now, salt: "salt", secret: "secret", config: { powBits: 6 } });
-  assert.equal(b.reports.length, 3); assert.equal(b.credentials.size, 3); assert.equal(b.verifyAudit().ok, true);
-  assert.equal(b.reports.find((r) => r.mod === "rejected") !== undefined, true);
+  assert.equal(nReports(b), 3); assert.equal(nCreds(b), 3); assert.equal(b.verifyAudit().ok, true);
+  assert.equal(b.db.get("SELECT COUNT(*) AS n FROM reports WHERE mod = 'rejected'").n, 1);
   assert.ok(b.submit({ token: toks[1], ip: "198.51.100.1", domain: SH, outcome: "ok" }).ok);          // credentials survive a restart
+  b.close();
 });
-test("a pre-credential data file is backed up, not misread", () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "tc-")), "data.json");
-  fs.writeFileSync(file, JSON.stringify([{ domain: "x.example", install: "abc", outcome: "never", tags: [], at: 1 }]));
-  const s = new ReportStore({ file, config: { powBits: 6 } });
-  assert.equal(s.reports.length, 0); assert.ok(fs.existsSync(file + ".v1.bak"));
+test("rate limits and replay protection survive a restart (they live in the database)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tc-")), file = path.join(dir, "data.db");
+  const a = makeStore({ file, config: { limits: { reportsPerCredPerDay: 2 } } }), tok = enrollFrom(a.store, ipN(1));
+  const { challenge, bits } = a.store.challenge(), solution = solvePowSync(challenge, bits);
+  a.store.enroll({ ip: ipN(2), challenge, solution });
+  report(a.store, tok, ipN(1)); report(a.store, tok, ipN(1), { domain: "b.example" }); a.store.close();
+  const b = new ReportStore({ file, now: a.c.now, salt: "salt", secret: "secret", config: { powBits: 6, limits: { reportsPerCredPerDay: 2 } } });
+  assert.equal(code(() => report(b, tok, ipN(1), { domain: "c.example" })), 429);                 // the daily budget was remembered
+  assert.equal(code(() => b.enroll({ ip: ipN(3), challenge, solution })), 400);                    // the used challenge was remembered
+  b.close();
 });
-test("old reports are pruned by retention", () => {
+test("old reports are pruned by retention, with expired helper rows and idle credentials", () => {
   const { store, c } = makeStore(), t = enrollFrom(store, ipN(1));
-  report(store, t, ipN(1)); c.tick(91 * DAY); store.prune();
-  assert.equal(store.reports.length, 0);
+  report(store, t, ipN(1)); enrollFrom(store, ipN(2));                                               // second identity never reports
+  c.tick(91 * DAY); const out = store.purge();
+  assert.equal(nReports(store), 0); assert.ok(out.reports === 1 && out.credentials >= 1 && out.challenges >= 2);
+  assert.ok(store.auditLog().some((e) => e.action === "retention_purge" && e.actor === "system"));
+});
+test("appeals: one review of a resolved dispute, by the merchant only, and the second decision is final", async () => {
+  const { store } = makeStore(), d = store.openDispute({ domain: SH, message: "These reports concern another business." });
+  assert.equal(code(() => store.appealDispute(d.id, d.token, "I want this reviewed again please.")), 409);   // not resolved yet
+  store.resolveDispute(d.id, "Reports stand.", "alice");
+  assert.equal(code(() => store.appealDispute(d.id, "wrong-token", "I want this reviewed again please.")), 403);
+  assert.equal(code(() => store.appealDispute(d.id, d.token, "short")), 400);
+  assert.equal(store.appealDispute(d.id, d.token, "The reports are about a competitor with a similar name.").ok, true);
+  assert.equal(code(() => store.appealDispute(d.id, d.token, "Appealing a second time, please.")), 409);
+  assert.equal(store.disputeStatus(d.id, d.token).status, "appealed");
+  assert.equal(code(() => store.disputeStatus(d.id, "wrong")), 403);
+  assert.equal(store.resolveDispute(d.id, "Reviewed by bob: upheld.", "bob").status, "closed");
+  assert.equal(code(() => store.resolveDispute(d.id, "again")), 409); assert.equal(code(() => store.appealDispute(d.id, d.token, "Appealing a third time here.")), 409);
+  assert.deepEqual(store.auditLog().filter((e) => e.action.startsWith("dispute")).map((e) => `${e.actor}:${e.action}`),
+    ["merchant:dispute_opened", "alice:dispute_resolved", "merchant:dispute_appealed", "bob:dispute_closed"]);   // who decided what is on the record
+});
+
+// ---------------- performance guards found by self-testing ----------------
+function bulk(store, domain, n, { burst = false, at0 } = {}) {
+  store.db.tx(() => {
+    for (let i = 0; i < n; i++) {
+      const cid = `${domain}-${i}`.replace(/[^a-z0-9-]/g, "").padEnd(24, "0").slice(0, 24) + "", id = (i.toString(16).padStart(8, "0") + (domain.length.toString(16).padStart(8, "0"))).slice(0, 16);
+      const unique = (Math.abs([...domain].reduce((a, c) => a * 31 + c.charCodeAt(0), 7)) % 100000).toString(16).padStart(5, "0") + i.toString(16).padStart(19, "0");
+      store.db.run("INSERT OR IGNORE INTO credentials (id, created_at, net, revoked) VALUES (?, ?, ?, 0)", unique.slice(0, 24), at0 - 30 * DAY, "n" + (i % 3000));
+      store.db.run("INSERT INTO reports (id, domain, cred, net, outcome, tags, at, id_age_ms, evidence, fixed, edits) VALUES (?, ?, ?, ?, 'never', '[]', ?, ?, 'reported', '[]', 0)",
+        id + (Math.abs([...domain].reduce((a, c) => a * 17 + c.charCodeAt(0), 3)) % 256).toString(16).padStart(2, "0").slice(0, 0) + "", domain, unique.slice(0, 24), "n" + (i % 3000), burst ? at0 + (i % 600) * 1000 : at0 + i * 40_000, 20 * DAY);
+      void cid;
+    }
+  });
+}
+test("a domain under a 5,000-report burst is still summarised quickly (it used to take over a second and freeze the server)", () => {
+  const { store, c } = makeStore(), t0 = c.now(); bulk(store, "hot.example", 5000, { burst: true, at0: t0 - DAY });
+  const s0 = performance.now(), sum = store.summary("hot.example"), ms = performance.now() - s0;
+  assert.ok(ms < 800, `summary took ${Math.round(ms)} ms`); assert.equal(sum.hidden, true);
+});
+test("evaluation work per request is bounded by maxEvaluateRows, whatever the size of the domain", () => {
+  const { store, c } = makeStore({ config: { maxEvaluateRows: 300 } }); bulk(store, "big.example", 2000, { at0: c.now() - 20 * DAY });
+  assert.equal(store.evaluate("big.example").length, 300);
+  const newest = store.db.get("SELECT MAX(at) AS m FROM reports").m; assert.equal(Math.max(...store.evaluate("big.example").map((r) => r.at)), newest, "the newest reports are the ones kept");
+});
+test("summaries are cached briefly and every kind of write invalidates the right entries", () => {
+  const { store, c } = makeStore(), toks = Array.from({ length: 7 }, (_, i) => enrollFrom(store, ipN(i))); c.tick(10 * DAY);
+  toks.slice(0, 6).forEach((t, i) => { report(store, t, ipN(i)); c.tick(6 * HOUR); });
+  const a = store.summary(SH); assert.equal(store.summary(SH), a, "second call is served from the cache (same object)");
+  report(store, toks[6], ipN(6)); assert.notEqual(store.summary(SH), a, "a new report invalidates it");
+  const b = store.summary(SH), id = store.db.get("SELECT id FROM reports WHERE domain = ?", SH).id;
+  store.moderate([id], "reject"); assert.notEqual(store.summary(SH), b, "moderation invalidates it"); const c2 = store.summary(SH);
+  store.revokeCredential(credOf(toks[1])); assert.notEqual(store.summary(SH), c2, "revocation invalidates it");
+  const d2 = store.summary(SH); c.tick(31_000); assert.notEqual(store.summary(SH), d2, "and it expires on its own after the TTL");
+  assert.equal(store.summary("other.example").total, 0);
+  const e1 = store.summary(SH); store.db.run("UPDATE reports SET outcome = 'ok' WHERE domain = ?", SH);
+  assert.notEqual(store.summary(SH), e1, "even a direct write (a path nobody remembered to invalidate) cannot leave a stale summary");
+  const e2 = store.summary(SH); store.openDispute({ domain: SH, message: "A long enough dispute message." }); assert.notEqual(store.summary(SH), e2);
+});
+test("the moderation queue pages through many domains and always makes progress, even with a tiny time budget", () => {
+  const { store, c } = makeStore({ config: { detect: { netBurstMin: 2 }, limits: { reportsPerNetPerHour: 9999, reportsPerCredPerDay: 9999 } } });
+  const toks = Array.from({ length: 6 }, (_, i) => enrollFrom(store, ipN(i))); c.tick(10 * DAY);
+  for (let d = 0; d < 40; d++) { toks.slice(0, 2).forEach((t) => report(store, t, "192.0.2.50", { domain: `q${d}.example` })); }
+  const seen = new Set(); let after = "", pages = 0;
+  for (;;) {
+    const page = store.queue({ limit: 7, after, budgetMs: 0 }); pages++;
+    page.items.forEach((i) => seen.add(i.domain));
+    if (!page.next) break; after = page.next; assert.ok(pages < 200, "no progress");
+  }
+  assert.ok(seen.size > 0 && seen.size <= 40, `saw ${seen.size} domains over ${pages} pages`);
+  const direct = store.queue({ limit: 200, budgetMs: 10_000 }); assert.equal(direct.items.length, seen.size, "paging and a single big call agree");
+});
+
+test("queue pagination always terminates: an empty page is the end, and every cursor strictly advances", () => {
+  const { store, c } = makeStore({ config: { detect: { netBurstMin: 2 }, limits: { reportsPerNetPerHour: 9999, reportsPerCredPerDay: 9999 } } });
+  assert.deepEqual(store.queue(), { items: [], next: null });                                    // empty database
+  const toks = Array.from({ length: 3 }, (_, i) => enrollFrom(store, ipN(i))); c.tick(10 * DAY);
+  for (let d = 0; d < 5; d++) toks.slice(0, 2).forEach((t) => report(store, t, "192.0.2.50", { domain: `p${d}.example` }));
+  assert.deepEqual(store.queue({ after: "zzzz" }), { items: [], next: null }, "past the last domain: finished, no cursor");
+  for (const budgetMs of [0, 1, 250]) for (const limit of [1, 2, 3, 5, 6, 200]) {
+    let after = "", pages = 0; const seen = [];
+    for (;;) { const p = store.queue({ limit, after, budgetMs }); seen.push(...p.items.map((i) => i.domain)); if (!p.next) break; assert.ok(p.next > after, "cursor must advance"); after = p.next; assert.ok(++pages < 50, `no termination (budget ${budgetMs}, limit ${limit})`); }
+    assert.deepEqual([...new Set(seen)].sort(), ["p0.example", "p1.example", "p2.example", "p3.example", "p4.example"], `budget ${budgetMs}, limit ${limit}`);
+    assert.equal(seen.length, 5, "no domain is returned twice");
+  }
 });

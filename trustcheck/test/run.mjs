@@ -8,6 +8,9 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FILE_TIMEOUT_MS = Number(process.env.TEST_FILE_TIMEOUT_MS || 60_000);
 const only = process.argv.slice(2);
+const REQUIRE_ALL = process.env.TEST_REQUIRE_ALL === "1";                 // CI on the full Node version: skipping a file is a failure
+let HAS_SQLITE = true; try { await import("node:sqlite"); } catch { HAS_SQLITE = false; }
+const needsSqlite = (file) => /^\/\/ requires: node:sqlite/m.test(fs.readFileSync(file, "utf8").split("\n").slice(0, 3).join("\n"));
 const files = (only.length ? only : fs.readdirSync(here).filter((f) => f.endsWith(".test.js")).sort()).map((f) => path.resolve(here, f.replace(/^test[\\/]/, "")));
 
 function runOne(file) {
@@ -20,8 +23,13 @@ function runOne(file) {
   });
 }
 
-const started = Date.now(); let failed = 0, passTests = 0;
+const started = Date.now(); let failed = 0, passTests = 0, skipped = 0;
 for (const f of files) {
+  if (!HAS_SQLITE && needsSqlite(f)) {
+    skipped++; console.log(`SKIP  ${path.basename(f).padEnd(26)} needs node:sqlite (Node >= 22.13); this is Node ${process.versions.node}`);
+    if (REQUIRE_ALL) { failed++; console.error(`FAIL  ${path.basename(f)} was skipped but TEST_REQUIRE_ALL=1`); }
+    continue;
+  }
   const t0 = Date.now(), r = await runOne(f), secs = ((Date.now() - t0) / 1000).toFixed(1);
   const pass = Number((/^# pass (\d+)/m.exec(r.out) || [])[1] || 0); passTests += pass;
   const name = path.basename(f);
@@ -29,5 +37,5 @@ for (const f of files) {
   else if (r.code !== 0) { failed++; console.error(`FAIL  ${name} (${secs}s)\n${r.out}`); }
   else console.log(`ok    ${name.padEnd(26)} ${String(pass).padStart(3)} tests  ${secs}s`);
 }
-console.log(`\n${files.length - failed}/${files.length} files passed, ${passTests} tests, ${((Date.now() - started) / 1000).toFixed(1)}s`);
+console.log(`\n${files.length - failed - skipped}/${files.length} files passed${skipped ? `, ${skipped} skipped (need node:sqlite)` : ""}, ${passTests} tests, ${((Date.now() - started) / 1000).toFixed(1)}s`);
 process.exit(failed ? 1 : 0);

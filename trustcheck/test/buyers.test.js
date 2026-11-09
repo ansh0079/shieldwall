@@ -1,3 +1,4 @@
+// requires: node:sqlite
 import "./setup.js";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -5,7 +6,8 @@ import { buyerSignals, buyerFeedback, enroll, submitReport } from "../lib/buyers
 import { buildReport } from "../lib/score.js";
 import { validateBuyerSummary } from "../lib/validate.js";
 import { createServer, shutdown } from "../server/server.js";
-import { makeStore, withFetch, json } from "./helpers.js";
+import { withFetch, json } from "./helpers.js";
+import { makeStore } from "./server-helpers.js";
 
 test("buyer reports are unverified context with zero score impact", () => {
   const sum = { total: 10, windowDays: 30, outcomes: { ok: 1, problem: 3, never: 6 }, tags: { fake_tracking: 5, delayed: 2 } };
@@ -42,11 +44,12 @@ test("summary validation rejects inconsistent server payloads", () => {
 test("client enrolment solves the server's challenge and refuses a hostile difficulty", async () => {
   const { store } = makeStore(), srv = createServer(store, { keepAlive: false, rateLimit: 1000 });
   await new Promise((r) => srv.listen(0, "127.0.0.1", r));
-  const base = `http://127.0.0.1:${srv.address().port}`;
-  const token = await enroll(base);
-  assert.equal((await submitReport(base, token, "shop.example", "never", ["fake_tracking"])).ok, true);
-  await assert.rejects(submitReport(base, "forged", "shop.example", "ok", []), (e) => e.status === 401);
-  await shutdown(srv);
+  try {
+    const base = `http://127.0.0.1:${srv.address().port}`;
+    const token = await enroll(base);
+    assert.equal((await submitReport(base, token, "shop.example", "never", ["fake_tracking"])).ok, true);
+    await assert.rejects(submitReport(base, "forged", "shop.example", "ok", []), (e) => e.status === 401);
+  } finally { await shutdown(srv); store.close(); }
   await withFetch(async () => json({ challenge: "x.y.99.z", bits: 99 }), async () => await assert.rejects(enroll("https://reports.example"), /unreasonable/));
   await withFetch(async () => json({ nonsense: true }), async () => await assert.rejects(enroll("https://reports.example"), /unexpected challenge/));
 });

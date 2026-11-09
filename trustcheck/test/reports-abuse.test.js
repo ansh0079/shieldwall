@@ -5,7 +5,7 @@ import { netRange, netHash, identityWeight, recencyWeight, weigh, detect, smooth
 import { signToken, verifyToken, makeChallenge, verifyPow, solvePowSync, leadingZeroBits, powHash, timingSafeEqualStr } from "../server/credentials.js";
 import { appendAudit, verifyAudit } from "../server/audit.js";
 import { solvePow } from "../lib/pow.js";
-import { TAGS as SERVER_TAGS } from "../server/store.js";
+import { TAGS as SERVER_TAGS } from "../server/vocab.js";
 import { TAGS as CLIENT_TAGS } from "../lib/vocab.js";
 
 const cfg = mergeConfig();
@@ -101,3 +101,29 @@ test("audit log is hash-chained and tamper-evident", () => {
   assert.equal(verifyAudit([log[1], log[0], ...log.slice(2)]).ok, false);                                       // reordering
 });
 test("server and client share one tag vocabulary", () => assert.deepEqual([...SERVER_TAGS].sort(), Object.keys(CLIENT_TAGS).sort()));
+
+test("burst detection is linear: 20,000 reports inside ten minutes are analysed in well under a second", () => {
+  // The first implementation sliced a window per report (quadratic): this input took many seconds and froze the server.
+  const rs = Array.from({ length: 20000 }, (_, i) => R(i, "n" + (i % 500), { cred: "c" + i, at: 1e12 + (i % 600) * 1000, idAgeMs: 20 * DAY }));
+  const t0 = performance.now(), flags = detect(rs, 1e12, cfg), ms = performance.now() - t0;
+  assert.ok(ms < 1500, `detect took ${Math.round(ms)} ms: it must not be quadratic`);
+  assert.equal(flags.size, 20000); assert.ok([...flags.values()].every((x) => x.has("timing_burst")));
+});
+test("the linear burst detector flags exactly the same reports as a straightforward quadratic reference", () => {
+  const ref = (reports, d) => {                                      // obviously-correct O(n^2) reference implementation
+    const sorted = [...reports].sort((a, b) => a.at - b.at), out = new Set();
+    for (let i = 0; i < sorted.length; i++) for (let j = 0; j <= i; j++) {
+      if (sorted[i].at - sorted[j].at > d.timingWindowMs) continue;
+      const win = sorted.slice(j, i + 1);
+      if (win.length >= d.timingMin && new Set(win.map((r) => r.cred)).size >= d.timingMin && win.length / sorted.length >= d.timingShare) win.forEach((r) => out.add(r.id));
+    }
+    return out;
+  };
+  let seed = 12345; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  for (let trial = 0; trial < 60; trial++) {
+    const n = 5 + Math.floor(rnd() * 60), spread = [60_000, 600_000, 3_600_000, 86_400_000][Math.floor(rnd() * 4)];
+    const rs = Array.from({ length: n }, (_, i) => R(i, "n" + (i % 7), { cred: "c" + Math.floor(rnd() * (n / 2 + 1)), at: 1e12 + Math.floor(rnd() * spread), idAgeMs: 30 * DAY }));
+    const mine = new Set([...detect(rs, 1e12, { ...cfg, detect: { ...cfg.detect, netBurstMin: 1e9, payloadMin: 1e9, skewMin: 1e9 } })].filter(([, v]) => v.has("timing_burst")).map(([k]) => k));
+    assert.deepEqual([...mine].sort(), [...ref(rs, cfg.detect)].sort(), `trial ${trial} (n=${n}, spread=${spread})`);
+  }
+});
