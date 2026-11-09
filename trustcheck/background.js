@@ -1,6 +1,7 @@
 import { registrableDomain, isSearchEngine } from "./lib/domain.js";
 import { urlSignals, pageSignals } from "./lib/heuristics.js";
-import { domainAge, safeBrowsing, trustpilot, reviewLinks } from "./lib/providers.js";
+import { domainAge, firstArchived, safeBrowsing, trustpilot, reviewLinks } from "./lib/providers.js";
+import { historySignals, historyLines } from "./lib/history.js";
 import { buildReport } from "./lib/score.js";
 import { extractCompanyNumber, fetchCompany, companySignals } from "./lib/companies.js";
 import { fetchSummary, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
@@ -28,9 +29,10 @@ async function analyze(url, tabId, force = false) {
   let net = (await chrome.storage.local.get(cacheKey))[cacheKey];
   if (force || !net || Date.now() - net.at > TTL) {
     const tasks = [domainAge(domain)];
+    const archiveTask = firstArchived(domain);
     tasks.push(sbKey ? safeBrowsing(u.origin + "/", sbKey) : Promise.resolve(null));
     tasks.push(tpKey ? trustpilot(domain, tpKey) : Promise.resolve(null));
-    const [age, sb, tp] = await Promise.allSettled(tasks);
+    const [age, sb, tp, arch] = await Promise.allSettled([...tasks, archiveTask]);
     net = {
       at: Date.now(),
       signals: [
@@ -38,6 +40,8 @@ async function analyze(url, tabId, force = false) {
         ...(sb.value ? sb.value.signals : []),
         ...(tp.value ? tp.value.signals : [])
       ],
+      registered: age.status === "fulfilled" ? age.value[0]?.since || null : null,
+      archived: arch.status === "fulfilled" ? arch.value : null,
       flagged: !!sb.value?.flagged,
       reviews: tp.value?.reviews || null,
       errors: [sb, tp].filter((r) => r.status === "rejected").map((r) => String(r.reason))
@@ -70,13 +74,15 @@ async function analyze(url, tabId, force = false) {
     companySigs = [{ id: "company", label: "No company registration number shown", status: "info", points: 0, detail: "UK traders normally show their company number in the site footer." }];
   }
 
-  const signals = [...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...buyerSignals(buyer), ...companySigs];
+  const signals = [...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...historySignals(net), ...buyerSignals(buyer), ...companySigs];
   if (!chKey) signals.push({ id: "co-off", label: "UK company check not connected", status: "info", points: 0, detail: "Add a free Companies House API key in Options to verify a shop's registered company." });
   if (!sbKey) signals.push({ id: "sb-off", label: "Malware/phishing database not connected", status: "info", points: 0, detail: "Add a free Google Safe Browsing key in Options for stronger protection." });
   if (!tpKey) signals.push({ id: "tp-off", label: "Review-site scores not connected", status: "info", points: 0, detail: "Add a Trustpilot API key in Options, or use the review links below." });
   const report = buildReport({ url, domain, signals, reviews: net.reviews, links: reviewLinks(domain), flagged: net.flagged,
     feedback: buyerFeedback(buyer), buyerTotal: buyer && !buyer.hidden ? buyer.total : 0 });
   report.backendOn = !!backend;
+  report.registered = net.registered || null; report.archived = net.archived || null;
+  report.history = historyLines(net);
   return report;
 }
 

@@ -21,7 +21,7 @@ export async function domainAge(domain) {
   if (!reg) return [];
   const days = Math.floor((Date.now() - new Date(reg.eventDate).getTime()) / 86400000);
   const years = (days / 365).toFixed(1);
-  const mk = (status, points, label) => [{ id: "age", label, status, points, detail: `Registered ${reg.eventDate.slice(0, 10)} (${days} days ago).` }];
+  const mk = (status, points, label) => [{ id: "age", label, status, points, since: reg.eventDate, detail: `Registered ${reg.eventDate.slice(0, 10)} (${days} days ago).` }];
   if (days < 30) return mk("bad", -30, `Domain registered only ${days} days ago`);
   if (days < 180) return mk("warn", -15, "Domain is under 6 months old");
   if (days < 730) return mk("info", 0, `Domain is ${years} years old`);
@@ -78,4 +78,14 @@ export function reviewLinks(domain) {
     { name: "Google: reviews", url: `https://www.google.com/search?q=${d}+reviews+scam` },
     { name: "Who.is record", url: `https://who.is/whois/${d}` }
   ];
+}
+
+// Earliest Internet Archive snapshot of the domain (when the site first appeared online).
+export async function firstArchived(domain) {
+  const res = await fetch(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(domain)}&limit=1&fl=timestamp&output=json`);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const rows = await res.json();
+  const ts = rows?.[1]?.[0];                       // [["timestamp"],["20190314123456"]]
+  if (!ts || !/^\d{8}/.test(ts)) return null;
+  return `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}T00:00:00Z`;
 }

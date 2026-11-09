@@ -49,13 +49,14 @@
 
   function points(r) {
     const pts = [];
+    for (const h of r.history || []) pts.push({ s: "info", t: h });
     if (r.verdict === "unverified") pts.push({ s: "warn", t: "No reviews, buyer reports or domain history found for this shop" });
     if (r.buyerTotal) pts.push({ s: "info", t: `Based on ${r.buyerTotal} buyer reports (30 days)` });
     for (const f of r.feedback || []) pts.push({ s: "bad", t: `${f.count} buyers: ${f.label}` });
     if (r.reviews) pts.push({ s: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad", t: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
     for (const th of r.reviews?.themes || []) pts.push({ s: "bad", t: `${th.count} of ${r.reviews.sample} recent reviews: ${th.label}` });
-    for (const sg of r.signals) if ((sg.status !== "info" || ["age", "buyers"].includes(sg.id)) && !(sg.id === "buyers" && (r.feedback?.length || r.buyerTotal))) pts.push({ s: sg.status, t: sg.label });
-    return pts.slice(0, 6);
+    for (const sg of r.signals) if ((sg.status !== "info" || ["age", "buyers"].includes(sg.id)) && !(r.history?.length && sg.id === "age" && sg.status !== "bad" && sg.status !== "warn") && !(sg.id === "buyers" && (r.feedback?.length || r.buyerTotal))) pts.push({ s: sg.status, t: sg.label });
+    return pts.slice(0, 7);
   }
 
   function show(rect, build) {

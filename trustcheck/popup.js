@@ -13,6 +13,8 @@ function render(r) {
   if (!r.backendOn) { $("rs1").hidden = true; $("rs2").hidden = true; $("rmsg").hidden = false; $("rmsg").textContent = "Set a report server in Options to share and see buyer reports."; }
   $("ring").className = r.verdict; $("ring").textContent = r.verdict === "unverified" ? "?" : r.score;
   $("verdict").textContent = LABEL[r.verdict]; $("domain").textContent = r.domain;
+  $("history").textContent = "";
+  for (const h of r.history || []) { const d = document.createElement("div"); d.textContent = h; $("history").append(d); }
   $("reviews").textContent = "";
   if (r.reviews) {
     const a = document.createElement("a");

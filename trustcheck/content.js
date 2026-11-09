@@ -61,6 +61,7 @@
   // Feedback points: buyer-report tags when available (r.feedback), then review-site score, then key findings.
   function feedbackPoints(r) {
     const pts = [];
+    for (const h of r.history || []) pts.push({ status: "info", text: h });
     if (r.verdict === "unverified") pts.push({ status: "warn", text: "No reviews, buyer reports or domain history found for this shop" });
     if (r.buyerTotal) pts.push({ status: "info", text: `Based on ${r.buyerTotal} buyer reports (30 days)` });
     for (const f of r.feedback || []) pts.push({ status: "bad", text: `${f.count} buyers: ${f.label}` });
@@ -69,8 +70,8 @@
     for (const th of r.reviews?.themes || []) pts.push({ status: "bad", text: `${th.count} of ${r.reviews.sample} recent ${r.reviews.source} reviews: ${th.label}` });
     // Also show "missing evidence" lines, so a caution score is never explained by green items alone.
     const KEEP = new Set(["age", "buyers", "company"]);
-    for (const sg of r.signals) if (sg.status !== "info" || KEEP.has(sg.id)) pts.push({ status: sg.status, text: sg.label });
-    return pts.slice(0, 7);
+    for (const sg of r.signals) if ((sg.status !== "info" || KEEP.has(sg.id)) && !(r.history?.length && sg.id === "age" && (sg.status === "info" || sg.status === "good"))) pts.push({ status: sg.status, text: sg.label });
+    return pts.slice(0, 8);
   }
 
   function render(r) {
