@@ -47,7 +47,7 @@
   // ---------- live badge: auto drop-down, hover for feedback points ----------
   const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626" };
   const WORDS = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk" };
-  let host, root, hidden = false, shownFor = "";
+  let host, root, hidden = false, shownFor = "", lastKey = "", hovering = false;
 
   function ensureHost() {
     if (host?.isConnected) return;
@@ -75,6 +75,11 @@
   function render(r) {
     if (r.neutral) { host?.remove(); return; }   // search pages: no rating to show
     if (hidden) return;
+    // Skip identical re-sends: rebuilding the badge would close a panel the user is hovering.
+    const key = JSON.stringify([r.score, r.verdict, r.feedback, r.reviews, r.buyerTotal, r.signals.map((x) => x.label)]);
+    if (key === lastKey && host?.isConnected) return;
+    lastKey = key;
+    const fresh = !host?.isConnected;            // only a brand-new badge slides in
     ensureHost();
     const color = COLORS[r.verdict];
     root.textContent = "";
@@ -114,17 +119,22 @@
     drop.append(bar, more);
     root.append(style, drop);
 
-    // Hover / focus on the badge opens the feedback points.
-    drop.addEventListener("mouseenter", () => drop.classList.add("open"));
-    drop.addEventListener("mouseleave", () => drop.classList.remove("open"));
+    // Hover on the badge opens the feedback points; the state survives a rebuild.
+    drop.addEventListener("mouseenter", () => { hovering = true; drop.classList.add("open"); });
+    drop.addEventListener("mouseleave", () => { hovering = false; if (r.verdict !== "risky") drop.classList.remove("open"); });
+    if (hovering) drop.classList.add("open");
 
-    // Auto drop-down on a new page/verdict; collapse to a small tab after a few seconds unless risky.
-    requestAnimationFrame(() => requestAnimationFrame(() => drop.classList.add("in")));
-    const key = location.href + r.verdict;
-    if (key !== shownFor) {
-      shownFor = key;
+    // Slide in only when first shown; a rebuild appears in place.
+    if (fresh) requestAnimationFrame(() => requestAnimationFrame(() => drop.classList.add("in")));
+    else { drop.style.transition = "none"; drop.classList.add("in"); }
+    // Auto-open on a new page/verdict, then collapse after a few seconds unless risky or hovered.
+    const pageKey = location.href + r.verdict;
+    if (pageKey !== shownFor) {
+      shownFor = pageKey;
       drop.classList.add("open");
-      if (r.verdict !== "risky") setTimeout(() => drop.classList.remove("open"), 4000);
+      if (r.verdict !== "risky") setTimeout(() => { if (!hovering) root.querySelector(".drop")?.classList.remove("open"); }, 4000);
+    } else if (!hovering && r.verdict !== "risky" && !fresh) {
+      /* keep whatever state the user left */
     }
   }
 
