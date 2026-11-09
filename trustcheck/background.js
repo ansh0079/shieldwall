@@ -2,6 +2,7 @@ import { registrableDomain, isSearchEngine } from "./lib/domain.js";
 import { urlSignals, pageSignals } from "./lib/heuristics.js";
 import { domainAge, firstArchived, safeBrowsing, trustpilot, reviewLinks } from "./lib/providers.js";
 import { historySignals, historyLines } from "./lib/history.js";
+import { priceContext, priceSignals } from "./lib/price.js";
 import { buildReport } from "./lib/score.js";
 import { extractCompanyNumber, fetchCompany, companySignals } from "./lib/companies.js";
 import { fetchSummary, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
@@ -74,7 +75,10 @@ async function analyze(url, tabId, force = false) {
     companySigs = [{ id: "company", label: "No company registration number shown", status: "info", points: 0, detail: "UK traders normally show their company number in the site footer." }];
   }
 
-  const signals = [...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...historySignals(net), ...buyerSignals(buyer), ...companySigs];
+  const pk = "price:" + domain;
+  const pc = (await chrome.storage.session.get(pk))[pk];
+  const priceSigs = pc && Date.now() - pc.at < 2 * 3600 * 1000 ? priceSignals(pc) : [];
+  const signals = [...priceSigs, ...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...historySignals(net), ...buyerSignals(buyer), ...companySigs];
   if (!chKey) signals.push({ id: "co-off", label: "UK company check not connected", status: "info", points: 0, detail: "Add a free Companies House API key in Options to verify a shop's registered company." });
   if (!sbKey) signals.push({ id: "sb-off", label: "Malware/phishing database not connected", status: "info", points: 0, detail: "Add a free Google Safe Browsing key in Options for stronger protection." });
   if (!tpKey) signals.push({ id: "tp-off", label: "Review-site scores not connected", status: "info", points: 0, detail: "Add a Trustpilot API key in Options, or use the review links below." });
@@ -114,7 +118,15 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     refresh(sender.tab.id, sender.tab.url, false);
   } else if (msg.type === "lookup") {
     // Hover lookup from a search page: quick check of one result's domain (no page scan available).
-    analyze(msg.url, -1, false).then((r) => reply(r && { ...r, quick: true })).catch(() => reply(null));
+    (async () => {
+      // Remember how this listing's price compares with the results page, so the shop page can show it too (2h).
+      const ctx = msg.priceInfo ? priceContext(msg.priceInfo) : null;
+      if (ctx) {
+        try { const d = registrableDomain(new URL(msg.url).hostname); await chrome.storage.session.set({ ["price:" + d]: { ...ctx, at: Date.now() } }); } catch { /* bad url */ }
+      }
+      const r = await analyze(msg.url, -1, false);
+      reply(r && { ...r, quick: true });
+    })().catch(() => reply(null));
     return true;
   } else if (msg.type === "submitReport") {
     (async () => {

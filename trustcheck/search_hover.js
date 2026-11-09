@@ -20,6 +20,21 @@
     return null;
   }
 
+  // Grow from the link to the whole result card (so price/seller text is included), stopping before
+  // the container would hold another result's link or become grid-sized.
+  function widen(n, url) {
+    let host; try { host = new URL(url).hostname; } catch { return n; }
+    for (let c = n.parentElement, i = 0; c && c !== document.body && i < 6; c = c.parentElement, i++) {
+      const r = c.getBoundingClientRect();
+      if (r.width > 560 || r.height > 720) break;
+      const others = [...c.querySelectorAll("a[href]")].map(destination).filter(Boolean)
+        .some((d) => { try { return new URL(d).hostname !== host; } catch { return false; } });
+      if (others) break;
+      n = c;
+    }
+    return n;
+  }
+
   // Smallest card-sized ancestor of the hovered element that holds a resolvable seller link.
   function findCard(el) {
     let n = el, unresolved = null;
@@ -27,10 +42,28 @@
       const r = n.getBoundingClientRect();
       if (r.width > 560 || r.height > 720) break;                       // too big: a whole grid, not one result
       const links = n.matches("a[href]") ? [n] : [...n.querySelectorAll("a[href]")];
-      for (const a of links) { const d = destination(a); if (d) return { card: n, url: d }; }
+      for (const a of links) { const d = destination(a); if (d) return { card: widen(n, d), url: d }; }
       if (links.length && !unresolved) unresolved = { card: n, url: null, hrefs: links.slice(0, 5).map((a) => a.href) };
     }
     return unresolved;     // card found, but no seller website could be read from its links
+  }
+
+  // Prices on the results page (current prices only: struck-through "was" prices are skipped).
+  let priceCache = { at: 0, list: [] };
+  function pagePrices() {
+    if (Date.now() - priceCache.at < 3000) return priceCache.list;
+    const list = [];
+    for (const n of document.querySelectorAll("span,div,b,strong,p")) {
+      if (n.childElementCount) continue;
+      const t = (n.textContent || "").trim();
+      if (t.length > 14 || !/^[£$€]\s?\d/.test(t)) continue;
+      if (n.closest("s,del") || getComputedStyle(n).textDecorationLine.includes("line-through")) continue;
+      if (!n.offsetParent) continue;
+      list.push(t);
+      if (list.length >= 80) break;
+    }
+    priceCache = { at: Date.now(), list };
+    return list;
   }
 
   const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
@@ -127,7 +160,8 @@
       let domain; try { domain = new URL(hit.url).hostname.replace(/^www\./, ""); } catch { return; }
       note(rect, `Checking ${domain}...`);
       let report = null;
-      try { report = await chrome.runtime.sendMessage({ type: "lookup", url: hit.url }); } catch { /* extension reloaded */ }
+      const priceInfo = { cardText: (hit.card.innerText || "").slice(0, 400), pagePrices: pagePrices() };
+      try { report = await chrome.runtime.sendMessage({ type: "lookup", url: hit.url, priceInfo }); } catch { /* extension reloaded */ }
       if (my !== token || current !== hit.card) return;     // user moved on
       if (!report || report.neutral) return hide();
       render(rect, domain, report);

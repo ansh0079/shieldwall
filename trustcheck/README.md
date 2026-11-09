@@ -7,7 +7,8 @@ whether the store they're on can be trusted. Separate from QuietBrowse; shares n
 | Signal | Source | Needs key |
 |---|---|---|
 | HTTPS, raw-IP host, punycode, risky TLD, spammy pattern, brand lookalike (`amaz0n.com`) | local | no |
-| Domain age | RDAP (rdap.org) | no |
+| Domain age + first-seen-online date | RDAP (rdap.org, Verisign fallback), Internet Archive | no |
+| Price far below the going rate for the same search (median of results page) | Google results page | no |
 | Contact / returns / privacy / about pages, payment form on HTTP, urgency tactics | page scan | no |
 | Malware & phishing blocklists | Google Safe Browsing | yes (free) |
 | Customer review score + recurring complaint themes | Trustpilot API (paid add-on) | yes |

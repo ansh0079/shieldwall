@@ -1,2 +1,2 @@
 { "name": "trustcheck", "version": "0.1.0", "private": true, "type": "module",
-  "scripts": { "test": "node --test test/trustcheck.test.js test/server.test.js test/themes.test.js test/companies.test.js test/deploy.test.js test/search.test.js test/unverified.test.js test/rdap.test.js test/history.test.js" } }
+  "scripts": { "test": "node --test test/trustcheck.test.js test/server.test.js test/themes.test.js test/companies.test.js test/deploy.test.js test/search.test.js test/unverified.test.js test/rdap.test.js test/history.test.js test/price.test.js" } }
