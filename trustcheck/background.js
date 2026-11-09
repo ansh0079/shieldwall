@@ -60,7 +60,7 @@ async function refresh(tabId, url, force) {
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
   if (info.status === "loading") pageScans.delete(tabId);
-  if (info.status === "complete" && tab.url) refresh(tabId, tab.url, false);
+  if ((info.status === "complete" || info.url) && tab.url) refresh(tabId, tab.url, false); // info.url: SPA navigation
 });
 chrome.tabs.onRemoved.addListener((id) => { pageScans.delete(id); chrome.storage.session?.remove("report:" + id); });
 
