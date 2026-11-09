@@ -53,7 +53,7 @@
     for (const f of r.feedback || []) pts.push({ s: "bad", t: `${f.count} buyers: ${f.label}` });
     if (r.reviews) pts.push({ s: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad", t: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
     for (const th of r.reviews?.themes || []) pts.push({ s: "bad", t: `${th.count} of ${r.reviews.sample} recent reviews: ${th.label}` });
-    for (const sg of r.signals) if (sg.status !== "info" && !(sg.id === "buyers" && r.feedback?.length)) pts.push({ s: sg.status, t: sg.label });
+    for (const sg of r.signals) if ((sg.status !== "info" || ["age", "buyers"].includes(sg.id)) && !(sg.id === "buyers" && (r.feedback?.length || r.buyerTotal))) pts.push({ s: sg.status, t: sg.label });
     return pts.slice(0, 6);
   }
 

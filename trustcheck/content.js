@@ -66,8 +66,10 @@
     if (r.reviews) pts.push({ status: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad",
       text: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
     for (const th of r.reviews?.themes || []) pts.push({ status: "bad", text: `${th.count} of ${r.reviews.sample} recent ${r.reviews.source} reviews: ${th.label}` });
-    for (const sg of r.signals) if (sg.status !== "info") pts.push({ status: sg.status, text: sg.label });
-    return pts.slice(0, 6);
+    // Also show "missing evidence" lines, so a caution score is never explained by green items alone.
+    const KEEP = new Set(["age", "buyers", "company"]);
+    for (const sg of r.signals) if (sg.status !== "info" || KEEP.has(sg.id)) pts.push({ status: sg.status, text: sg.label });
+    return pts.slice(0, 7);
   }
 
   function render(r) {
@@ -90,7 +92,7 @@
       .drop.open .more{max-height:260px;padding:2px 12px 10px}
       .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin:6px 0 2px}
       .p{margin:4px 0;display:flex;gap:6px}.p i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px}
-      .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}`;
+      .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.info i{background:#9ca3af}`;
     const drop = document.createElement("div"); drop.className = "drop";
     const bar = document.createElement("div"); bar.className = "bar";
     const sc = document.createElement("div"); sc.className = "score"; sc.textContent = r.score;
