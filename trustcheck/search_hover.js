@@ -138,6 +138,14 @@
   }
 
   document.addEventListener("mouseover", (e) => {
+    try { onHover(e); }
+    catch (err) {
+      console.warn("[TrustCheck] hover error:", err);
+      try { note(e.target.getBoundingClientRect(), "TrustCheck error: " + String(err?.message || err).slice(0, 150)); } catch { /* ignore */ }
+    }
+  }, true);
+
+  function onHover(e) {
     if (host && e.composedPath().includes(host)) return;
     if (e.altKey) {
       clearTimeout(showTimer); current = null;
@@ -166,6 +174,6 @@
       if (!report || report.neutral) return hide();
       render(rect, domain, report);
     }, 350);
-  }, true);
+  }
   document.addEventListener("scroll", () => { if (host) host.style.display = "none"; current = null; }, { passive: true, capture: true });
 })();

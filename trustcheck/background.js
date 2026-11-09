@@ -125,8 +125,8 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
         try { const d = registrableDomain(new URL(msg.url).hostname); await chrome.storage.session.set({ ["price:" + d]: { ...ctx, at: Date.now() } }); } catch { /* bad url */ }
       }
       const r = await analyze(msg.url, -1, false);
-      reply(r && { ...r, quick: true });
-    })().catch(() => reply(null));
+      reply(r ? { ...r, quick: true } : { error: "could not read this seller's address" });
+    })().catch((e) => reply({ error: String(e?.message || e).slice(0, 200) }));
     return true;
   } else if (msg.type === "submitReport") {
     (async () => {
