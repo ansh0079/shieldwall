@@ -47,7 +47,7 @@ export class Store {
     if (rows.length < this.minReports) return { domain, total: rows.length, hidden: rows.length > 0, windowDays: this.windowDays };
     const outcomes = { ok: 0, problem: 0, never: 0 }, tags = {};
     for (const r of rows) { outcomes[r.outcome]++; for (const t of r.tags) tags[t] = (tags[t] || 0) + 1; }
-    return { domain, total: rows.length, windowDays: this.windowDays, outcomes, tags };
+    return { domain, total: rows.length, windowDays: this.windowDays, outcomes, tags, verification: "unverified" };
   }
   prune() {
     const cutoff = this.now() - this.retentionDays * DAY;

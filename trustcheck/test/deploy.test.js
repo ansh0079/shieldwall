@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Store } from "../server/store.js";
-import { createServer, clientIp } from "../server/server.js";
+import { createServer, clientIp, shutdown } from "../server/server.js";
 
 const rep = (n, o = "never", d = "shop.example") => ({ installId: "install-" + String(n).padStart(6, "0"), domain: d, outcome: o, tags: [] });
 const listen = async (srv) => { await new Promise((r) => srv.listen(0, "127.0.0.1", r)); return `http://127.0.0.1:${srv.address().port}`; };
@@ -38,20 +38,20 @@ test("client IP honours X-Forwarded-For only when trusted", () => {
   assert.equal(clientIp(req, false), "127.0.0.1");
 });
 test("healthz, 413 on big body, 404, cache header", async () => {
-  const srv = createServer(new Store({ minReports: 1 })); const base = await listen(srv);
+  const srv = createServer(new Store({ minReports: 1 }), { keepAlive: false }); const base = await listen(srv);
   assert.equal((await fetch(base + "/healthz")).status, 200);
   assert.equal((await fetch(base + "/nope")).status, 404);
   assert.equal((await fetch(base + "/v1/report", { method: "POST", body: "x".repeat(5000) })).status, 413);
   const r = await fetch(base + "/v1/summary?domain=shop.example");
   assert.match(r.headers.get("cache-control"), /max-age/);
   assert.equal(r.headers.get("x-content-type-options"), "nosniff");
-  srv.close();
+  await shutdown(srv);
 });
 test("rate limit uses forwarded IP when trusted", async () => {
-  const srv = createServer(new Store({ minReports: 1 }), { rateLimit: 1, trustProxy: true }); const base = await listen(srv);
+  const srv = createServer(new Store({ minReports: 1 }), { rateLimit: 1, trustProxy: true, keepAlive: false }); const base = await listen(srv);
   const post = (n, ip) => fetch(base + "/v1/report", { method: "POST", headers: { "x-forwarded-for": ip }, body: JSON.stringify(rep(n)) });
   assert.equal((await post(1, "1.1.1.1")).status, 200);
   assert.equal((await post(2, "1.1.1.1")).status, 429);
   assert.equal((await post(3, "2.2.2.2")).status, 200);   // different client unaffected
-  srv.close();
+  await shutdown(srv);
 });

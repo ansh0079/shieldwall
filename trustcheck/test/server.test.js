@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Store } from "../server/store.js";
-import { createServer } from "../server/server.js";
+import { createServer, shutdown } from "../server/server.js";
 import { buyerSignals, buyerFeedback } from "../lib/buyers.js";
 
 const rep = (n, o, tags = []) => ({ installId: "install-" + String(n).padStart(6, "0"), domain: "shop.example", outcome: o, tags });
@@ -33,7 +33,7 @@ test("validation rejects bad input", () => {
   assert.throws(() => s.add({ ...rep(1, "never"), installId: "x" }));
 });
 test("http round trip + rate limit", async () => {
-  const srv = createServer(new Store({ minReports: 1 }), { rateLimit: 3 });
+  const srv = createServer(new Store({ minReports: 1 }), { rateLimit: 3, keepAlive: false });
   await new Promise((r) => srv.listen(0, r));
   const base = `http://127.0.0.1:${srv.address().port}`;
   const post = (n) => fetch(base + "/v1/report", { method: "POST", body: JSON.stringify(rep(n, "never", ["fake_tracking"])) });
@@ -41,13 +41,26 @@ test("http round trip + rate limit", async () => {
   assert.equal((await post(4)).status, 429);
   const sum = await (await fetch(base + "/v1/summary?domain=shop.example")).json();
   assert.equal(sum.outcomes.never, 3);
-  srv.close();
+  await shutdown(srv);
 });
-test("buyer signals and feedback", () => {
+test("buyer reports are unverified context with zero score impact", () => {
   const sum = { total: 10, windowDays: 30, outcomes: { ok: 1, problem: 3, never: 6 }, tags: { fake_tracking: 5, delayed: 2 } };
-  assert.equal(buyerSignals(sum)[0].status, "bad");
-  assert.match(buyerSignals(sum)[0].label, /6 of 10 buyers say their order never arrived/);
+  const sig = buyerSignals(sum)[0];
+  assert.equal(sig.points, 0); assert.equal(sig.status, "info"); assert.equal(sig.verification, "unverified");
+  assert.match(sig.label, /6 of 10 unverified reports say the order never arrived/);
+  assert.match(sig.detail, /do not change the score/);
   assert.equal(buyerFeedback(sum)[0].label, "order never arrived");
-  assert.equal(buyerSignals({ total: 2, hidden: true })[0].status, "info");
-  assert.equal(buyerSignals({ total: 8, outcomes: { ok: 7, problem: 1, never: 0 } })[0].status, "good");
+  assert.equal(buyerSignals({ total: 2, hidden: true })[0].points, 0);
+  const great = buyerSignals({ total: 8, windowDays: 30, outcomes: { ok: 7, problem: 1, never: 0 } })[0];
+  assert.equal(great.points, 0); assert.match(great.label, /unverified/);
+});
+test("a burst of fabricated reports cannot move the score or the verdict", async () => {
+  const { buildReport } = await import("../lib/score.js");
+  const sums = [{ total: 3, hidden: false, windowDays: 30, outcomes: { ok: 0, problem: 0, never: 3 }, tags: {} }, { total: 3, hidden: false, windowDays: 30, outcomes: { ok: 3, problem: 0, never: 0 }, tags: {} }];
+  const base = [{ id: "https", label: "h", status: "good", points: 5 }, { id: "age", label: "a", status: "good", points: 20 }];
+  const plain = buildReport({ url: "https://s.example", domain: "s.example", signals: base, links: [] });
+  for (const sum of sums) {
+    const r = buildReport({ url: "https://s.example", domain: "s.example", signals: [...base, ...buyerSignals(sum)], links: [] });
+    assert.equal(r.score, plain.score); assert.equal(r.verdict, plain.verdict);
+  }
 });

@@ -12,6 +12,9 @@
 <label for="ch">Companies House API key (free)</label>
 <input id="ch" type="password" autocomplete="off">
 <small>Register free at developer.company-information.service.gov.uk. Verifies the company number a UK shop shows in its footer. The number is sent to Companies House.</small>
+<label for="sbttl">Safe Browsing result cache (minutes)</label>
+<input id="sbttl" type="number" min="1" max="1440" placeholder="30">
+<small>How long a clean/flagged result for one exact page URL is reused. Shorter is safer; each re-check sends the page URL to Google.</small>
 <label for="be">Buyer-report server URL</label>
 <input id="be" placeholder="http://localhost:8787" autocomplete="off">
 <small>Where buyer reports are stored and read. Only the shop's domain, your answer and a random anonymous install ID are sent.</small>

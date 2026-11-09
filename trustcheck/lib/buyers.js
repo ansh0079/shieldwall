@@ -1,52 +1,44 @@
-// Buyer-report client logic + shared vocabulary. Pure helpers are unit-tested.
-export const OUTCOMES = ["ok", "problem", "never"];
-export const TAGS = {
-  delayed: "order delayed",
-  wrong_item: "wrong item received",
-  fake_tracking: "tracking never updated / not genuine",
-  missing_items: "items missing from order",
-  not_as_described: "item not as described",
-  poor_quality: "poor quality",
-  counterfeit: "counterfeit or fake goods",
-  damaged: "item arrived damaged",
-  refund_refused: "refund refused",
-  unresponsive: "seller unresponsive",
-  hidden_fees: "hidden fees or extra charges",
-  charged_no_confirmation: "charged but no order confirmation",
-  card_misuse: "card or account misused afterwards"
-};
+// Buyer-report client logic. Reports are ANONYMOUS and UNVERIFIED: they are shown as context but have no effect on the score
+// until the server can issue signed identities and resist bursts (see IMPROVEMENT_PLAN items 5-6).
+import { fetchJson } from "./http.js";
+import { validateBuyerSummary } from "./validate.js";
+import { OUTCOMES, TAGS } from "./vocab.js";
+export { OUTCOMES, TAGS };
 
-export async function fetchSummary(base, domain) {
-  const res = await fetch(`${base.replace(/\/$/, "")}/v1/summary?domain=${encodeURIComponent(domain)}`);
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
+const trim = (base) => base.replace(/\/$/, "");
+
+export async function fetchSummary(base, domain, opts = {}) {
+  const d = await fetchJson(`${trim(base)}/v1/summary?domain=${encodeURIComponent(domain)}`, { timeoutMs: 6000, maxBytes: 64 * 1024, ...opts });
+  return validateBuyerSummary(d);
 }
 
-export async function submitReport(base, installId, domain, outcome, tags) {
-  const res = await fetch(`${base.replace(/\/$/, "")}/v1/report`, {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ installId, domain, outcome, tags })
-  });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "HTTP " + res.status);
-  return res.json();
+export async function submitReport(base, installId, domain, outcome, tags, opts = {}) {
+  try {
+    return await fetchJson(`${trim(base)}/v1/report`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ installId, domain, outcome, tags }), timeoutMs: 8000, maxBytes: 16 * 1024, ...opts
+    });
+  } catch (e) { throw new Error(e?.detail || e?.message || "could not send report"); }
 }
 
-// Turn an aggregate summary into score signals.
+export const UNVERIFIED_NOTE = "Anonymous, unverified reports. They are context only, do not change the score, and may not come from independent buyers.";
+
+// Context lines only: points are always 0 and status is always "info".
 export function buyerSignals(sum) {
-  const info = (label, detail) => [{ id: "buyers", label, status: "info", points: 0, detail }];
+  const sig = (label, detail) => [{ id: "buyers", label, status: "info", points: 0, verification: "unverified", scope: "domain", detail }];
   if (!sum) return [];
-  if (!sum.total) return info("No buyer reports yet", "Be the first to report your experience from the popup.");
-  if (sum.hidden) return info(`${sum.total} buyer report(s) - too few to show`, "Reports are shown once several independent buyers agree.");
-  const { ok = 0, problem = 0, never = 0 } = sum.outcomes || {};
-  const t = sum.total, days = sum.windowDays || 30;
-  const mk = (status, points, label) => [{ id: "buyers", label, status, points, detail: `Based on ${t} buyer reports in the last ${days} days.` }];
-  if (never / t >= 0.4) return mk("bad", -35, `${never} of ${t} buyers say their order never arrived`);
-  if ((never + problem) / t >= 0.5) return mk("bad", -20, `${never + problem} of ${t} buyers reported a problem`);
-  if (ok / t >= 0.8 && t >= 5) return mk("good", 15, `${ok} of ${t} buyers received their order fine`);
-  return mk("warn", -5, `Mixed buyer reports (${ok} fine, ${never + problem} problems)`);
+  if (!sum.total) return sig("No buyer reports yet", "Be the first to report your experience from the popup.");
+  const days = sum.windowDays || 30;
+  if (sum.hidden) return sig(`${sum.total} unverified report${sum.total === 1 ? "" : "s"} - too few to show`, "Reports are shown only once several have been received.");
+  const { ok = 0, problem = 0, never = 0 } = sum.outcomes || {}, t = sum.total;
+  const label = never / t >= 0.4 ? `${never} of ${t} unverified reports say the order never arrived`
+    : (never + problem) / t >= 0.5 ? `${never + problem} of ${t} unverified reports describe a problem`
+    : ok / t >= 0.8 ? `${ok} of ${t} unverified reports say the order arrived fine`
+    : `Mixed unverified reports (${ok} fine, ${never + problem} problems)`;
+  return sig(label, `${UNVERIFIED_NOTE} ${t} reports, last ${days} days.`);
 }
 
-// Most common feedback points for the badge / interstitial.
+// Most common reported problems, for the badge / interstitial lists.
 export function buyerFeedback(sum) {
   if (!sum || sum.hidden || !sum.total) return [];
   const out = [];

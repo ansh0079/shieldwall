@@ -63,13 +63,13 @@
     const pts = [];
     for (const h of r.history || []) pts.push({ status: "info", text: h });
     if (r.verdict === "unverified") pts.push({ status: "warn", text: "No reviews, buyer reports or domain history found for this shop" });
-    if (r.buyerTotal) pts.push({ status: "info", text: `Based on ${r.buyerTotal} buyer reports (30 days)` });
-    for (const f of r.feedback || []) pts.push({ status: "bad", text: `${f.count} buyers: ${f.label}` });
+    if (r.buyerTotal) pts.push({ status: "info", text: `${r.buyerTotal} unverified buyer reports (30 days, not scored)` });
+    for (const f of r.feedback || []) pts.push({ status: "info", text: `${f.count} unverified reports: ${f.label}` });
     if (r.reviews) pts.push({ status: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad",
       text: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
     for (const th of r.reviews?.themes || []) pts.push({ status: "bad", text: `${th.count} of ${r.reviews.sample} recent ${r.reviews.source} reviews: ${th.label}` });
     // Also show "missing evidence" lines, so a caution score is never explained by green items alone.
-    const KEEP = new Set(["age", "buyers", "company"]);
+    const KEEP = new Set(["age", "buyers", "company", "sb"]);
     for (const sg of r.signals) if ((sg.status !== "info" || KEEP.has(sg.id)) && !(r.history?.length && sg.id === "age" && (sg.status === "info" || sg.status === "good"))) pts.push({ status: sg.status, text: sg.label });
     return pts.slice(0, 8);
   }
@@ -185,7 +185,7 @@
     const reasons = document.createElement("ul");
     const pts = [];
     if (r.buyerTotal) pts.push({ status: "bad", text: `${r.buyerTotal} buyers reported on this shop in the last 30 days:` });
-    for (const f of r.feedback || []) pts.push({ status: "bad", text: `${f.count} buyers: ${f.label}` });
+    for (const f of r.feedback || []) pts.push({ status: "info", text: `${f.count} unverified reports: ${f.label}` });
     if (r.reviews) pts.push({ status: r.reviews.score >= 3 ? "warn" : "bad", text: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
     for (const th of r.reviews?.themes || []) pts.push({ status: "bad", text: `${th.count} of ${r.reviews.sample} recent ${r.reviews.source} reviews: ${th.label}` });
     for (const sg of r.signals) if (sg.status === "bad" || sg.status === "warn") pts.push({ status: sg.status, text: sg.label });

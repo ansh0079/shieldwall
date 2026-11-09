@@ -17,6 +17,8 @@ whether the store they're on can be trusted. Separate from QuietBrowse; shares n
 
 **Hover cards:** on Google/Bing/DuckDuckGo results, hovering a result shows the seller site's quick rating in a side card (domain of the hovered result only; link redirects are unwrapped). Not verified against live Google Shopping markup.
 
+Buyer reports are shown as **unverified context** and have **no effect on the score** until reporting is abuse-resistant (see PLAN_STATUS.md).
+
 Score = 50 + sum of signal points, clamped to 0-100. 70+ trusted, 40-69 caution, below 40 risky.
 A Safe Browsing hit caps the score at 10. Risky pages get an in-page warning banner.
 
@@ -45,3 +47,22 @@ buyers have reported in the last 30 days. Counts feed the score, the badge hover
 Deployment (Docker, HTTPS proxy, env vars, backups): see [server/DEPLOY.md](server/DEPLOY.md).
 Still a pilot-grade service: JSON-file storage, basic abuse limits only, no shop dispute process.
 Seeded data is fake - never ship it.
+
+## What is sent where
+| Provider | Receives | Notes |
+|---|---|---|
+| RDAP (rdap.org, then Verisign directly for .com/.net) | registrable domain | skipped for sites hosted as a tenant of a shared platform (e.g. `*.github.io`) |
+| Internet Archive | registrable domain (the tenant's own name for tenants) | |
+| Google Safe Browsing (needs your key) | the full page URL, without fragment or credentials | hover lookups on search results drop the query string first |
+| Trustpilot (needs your key) | registrable domain | |
+| Companies House (needs your key) | the company number printed on the page | |
+| Your report server (optional) | registrable domain, your answer, an anonymous install ID | |
+Search engines and the pages you browse are never sent anywhere.
+
+## Domain handling
+Sites are keyed by the **registrable domain from the full Public Suffix List, including private suffixes**, so `safe.github.io` and
+`evil.github.io` never share evidence. The list lives in `lib/psl_data.js` (MPL-2.0, from https://publicsuffix.org/);
+refresh it with `node tools/build_psl.mjs`.
+
+## Tests
+`npm test` runs every `test/*.test.js` in its own process with a timeout, on Node 18+. A hung file is named and killed.

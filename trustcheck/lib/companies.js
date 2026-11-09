@@ -1,4 +1,6 @@
 // UK Companies House check. A shop's company number is read from its page footer, then looked up.
+import { fetchJson, ProviderError } from "./http.js";
+import { validateCompany } from "./validate.js";
 const DAY = 86400000;
 
 // Finds e.g. "Company No. 12345678", "registered number: SC123456", "Registered in England and Wales (No. 09876543)".
@@ -7,13 +9,14 @@ export function extractCompanyNumber(text) {
   return m ? m[1].toUpperCase() : null;
 }
 
-export async function fetchCompany(number, key) {
-  const res = await fetch(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(number)}`, {
-    headers: { Authorization: "Basic " + btoa(key + ":") }
-  });
-  if (res.status === 404) return null;                 // number does not exist
-  if (!res.ok) throw new Error("HTTP " + res.status);  // rate limit, bad key...
-  return res.json();
+export async function fetchCompany(number, key, opts = {}) {
+  try {
+    return validateCompany(await fetchJson(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(number)}`, {
+      headers: { Authorization: "Basic " + btoa(key + ":") }, timeoutMs: 8000, maxBytes: 256 * 1024, ...opts }));
+  } catch (e) {
+    if (e instanceof ProviderError && e.kind === "http" && e.status === 404) return null;   // number does not exist
+    throw e;                                                                              // rate limit, bad key, outage...
+  }
 }
 
 const strip = (n) => String(n).toLowerCase().replace(/\b(limited|ltd|plc|llp|uk|the)\b/g, "").replace(/[^a-z0-9 ]/g, " ").trim();

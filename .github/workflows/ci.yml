@@ -28,14 +28,18 @@ jobs:
 
   trustcheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10          # a hung test must fail the job, not run for hours
+    strategy:
+      matrix:
+        node: ['18', '20', '22']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node }}
 
       - name: Run TrustCheck tests
         working-directory: trustcheck
