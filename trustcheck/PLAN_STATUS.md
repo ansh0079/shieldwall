@@ -23,6 +23,6 @@ Legend: **done** (with tests) / **partial** / **not started**.
 | 17 | Report presentation | partial | Popup leads with verdict and confidence, summary, key findings, missing checks, evidence by family, research links; setup notices are separate. Freshness is shown per signal. |
 | 18 | Accessibility | partial | Focus outlines, reduced-motion, labelled score ring. No keyboard trap/restore in the checkout dialog, contrast audit or screen-reader testing. |
 | 19 | Repair hanging test suite | **done** | Cause: idle keep-alive sockets kept `server.close()` pending (5-6 s per file on Node 18, longer elsewhere). Fixed; `npm test` runner gives each file a timeout; verified on Node 18/20/22. |
-| 20 | Evaluation corpus | not started | |
-| 21 | Automated coverage | partial | Added suffix, URL cache, stale-navigation, provider failure and report-burst tests. No accessibility, performance or packed-build tests. |
-| 22 | Release gates | partial | CI runs on Node 18/20/22 with a 10-minute timeout; no other gates. |
+| 20 | Evaluation corpus | **done (synthetic v1)** | 52 dev + 26 held-out evidence profiles across all nine categories, run through the real code with a fixed clock; precision/recall/FPR/FNR with 95% intervals, false reassurance, calibration by verdict, known gaps; frozen held-out set, verdict-drift baseline, per-release history, CI gates. **Real-world validation is still missing**: the cases are synthetic and written by the rule authors (see `eval/README.md`). |
+| 21 | Automated coverage | partial | Added suffix, URL cache, stale-navigation, provider-failure, report-burst, decision-rule and evaluation tests (mutation-checked). No accessibility, performance or packed-build tests. |
+| 22 | Release gates | partial | CI runs unit tests on Node 18/20/22 with a timeout, plus the evaluation gates (dev + held-out). No accessibility, manual-test, permission-review or backend-recovery gates. |

@@ -15,9 +15,11 @@ test("lookalike domain flagged", () => {
   assert.ok(ids(urlSignals("https://amaz0n.com/")).includes("lookalike"));
   assert.ok(ids(urlSignals("https://amazon-deals-store.com/")).includes("lookalike"));
 });
-test("real retailer not flagged as lookalike", () => {
-  const s = ids(urlSignals("https://www.amazon.com/"));
-  assert.ok(s.includes("known") && !s.includes("lookalike"));
+test("real retailer not flagged as lookalike; marketplaces are not 'well-known retailers'", () => {
+  const retailer = ids(urlSignals("https://www.ikea.com/"));
+  assert.ok(retailer.includes("known") && !retailer.includes("lookalike"));
+  const market = ids(urlSignals("https://www.amazon.com/"));
+  assert.ok(market.includes("marketplace") && !market.includes("known") && !market.includes("lookalike"));
 });
 test("http + raw IP is a strong warning but, from one family, not yet 'high risk'", () => {
   const r = rep("http://192.168.4.4/pay");

@@ -45,3 +45,11 @@ jobs:
         working-directory: trustcheck
         run: npm test
 
+      - name: Evaluation gates (development set + verdict drift)
+        working-directory: trustcheck
+        run: npm run eval:check
+
+      - name: Evaluation gates (held-out set, aggregates only)
+        working-directory: trustcheck
+        run: npm run eval:holdout
+

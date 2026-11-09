@@ -1,0 +1,262 @@
+{
+ "legit-big-all-keys": {
+  "verdict": "lower",
+  "confidence": "high",
+  "score": 100
+ },
+ "legit-big-no-keys": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "legit-mid-reviews": {
+  "verdict": "lower",
+  "confidence": "high",
+  "score": 100
+ },
+ "legit-small-company": {
+  "verdict": "lower",
+  "confidence": "high",
+  "score": 100
+ },
+ "legit-known-retailer-uk": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "legit-known-marketplace-home": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "legit-mixed-reviews": {
+  "verdict": "lower",
+  "confidence": "high",
+  "score": 88
+ },
+ "legit-sb-outage": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "fraud-new-cheap": {
+  "verdict": "risky",
+  "confidence": "medium",
+  "score": 0
+ },
+ "fraud-lookalike": {
+  "verdict": "risky",
+  "confidence": "medium",
+  "score": 0
+ },
+ "fraud-sb-flagged": {
+  "verdict": "dangerous",
+  "confidence": "high",
+  "score": 0
+ },
+ "fraud-fake-company": {
+  "verdict": "risky",
+  "confidence": "medium",
+  "score": 0
+ },
+ "fraud-no-network-evidence": {
+  "verdict": "caution",
+  "confidence": "low",
+  "score": 36
+ },
+ "fraud-fake-reviews": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "fraud-http-checkout": {
+  "verdict": "dangerous",
+  "confidence": "medium",
+  "score": 0
+ },
+ "fraud-reused-domain": {
+  "verdict": "caution",
+  "confidence": "medium",
+  "score": 36
+ },
+ "fraud-poor-reviews": {
+  "verdict": "risky",
+  "confidence": "medium",
+  "score": 0
+ },
+ "fraud-ip-host": {
+  "verdict": "caution",
+  "confidence": "low",
+  "score": 36
+ },
+ "compromised-home-clean": {
+  "verdict": "lower",
+  "confidence": "high",
+  "score": 100
+ },
+ "compromised-login-page": {
+  "verdict": "dangerous",
+  "confidence": "high",
+  "score": 10
+ },
+ "compromised-whole-site": {
+  "verdict": "dangerous",
+  "confidence": "high",
+  "score": 10
+ },
+ "compromised-sb-outage": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "newlegit-company-ok": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 60
+ },
+ "newlegit-reviews-sb": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "newlegit-very-new": {
+  "verdict": "caution",
+  "confidence": "high",
+  "score": 36
+ },
+ "newlegit-old-company-new-site": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 60
+ },
+ "newlegit-no-network": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 63
+ },
+ "market-fraud-seller": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "market-legit-seller": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "market-fake-storefront": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "tenant-legit-shopify": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 63
+ },
+ "tenant-fraud-shopify": {
+  "verdict": "caution",
+  "confidence": "low",
+  "score": 36
+ },
+ "tenant-fraud-githubio-sb": {
+  "verdict": "dangerous",
+  "confidence": "high",
+  "score": 3
+ },
+ "tenant-legit-docs": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 55
+ },
+ "tenant-fraud-polished": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 63
+ },
+ "tenant-legit-reviewed": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "idn-legit-de": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "idn-homograph-fraud": {
+  "verdict": "risky",
+  "confidence": "medium",
+  "score": 0
+ },
+ "intl-legit-couk": {
+  "verdict": "lower",
+  "confidence": "high",
+  "score": 100
+ },
+ "intl-legit-comau": {
+  "verdict": "lower",
+  "confidence": "high",
+  "score": 100
+ },
+ "intl-legit-cojp": {
+  "verdict": "lower",
+  "confidence": "medium",
+  "score": 88
+ },
+ "url-hover-threat-in-query": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ },
+ "url-page-threat-in-query": {
+  "verdict": "dangerous",
+  "confidence": "high",
+  "score": 10
+ },
+ "url-legit-tracking-params": {
+  "verdict": "lower",
+  "confidence": "high",
+  "score": 100
+ },
+ "contra-old-but-flagged": {
+  "verdict": "dangerous",
+  "confidence": "high",
+  "score": 10
+ },
+ "contra-fraud-borrowed-company": {
+  "verdict": "risky",
+  "confidence": "medium",
+  "score": 0
+ },
+ "contra-all-down-clean-page": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 63
+ },
+ "contra-all-down-fraud-page": {
+  "verdict": "risky",
+  "confidence": "medium",
+  "score": 0
+ },
+ "contra-hype-reviews-new-domain": {
+  "verdict": "caution",
+  "confidence": "medium",
+  "score": 51
+ },
+ "contra-rate-limited-reviews": {
+  "verdict": "lower",
+  "confidence": "medium",
+  "score": 88
+ },
+ "legit-known-retailer-nonmarket": {
+  "verdict": "lower",
+  "confidence": "low",
+  "score": 100
+ },
+ "market-fraud-seller-all-keys": {
+  "verdict": "limited",
+  "confidence": "low",
+  "score": 69
+ }
+}

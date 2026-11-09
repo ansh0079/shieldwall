@@ -22,14 +22,19 @@ export function decide(signals) {
   const famsOf = (xs) => new Set(xs.map((s) => s.family));
   const positives = signals.filter(isPositiveEvidence);
   const positiveFams = famsOf(positives);
+  // Things that make a positive verdict unsafe even when two families look good (each found by evaluating the rules).
+  const blockers = [];
+  if (signals.some((s) => (s.id === "age" || s.id === "reuse") && s.strength)) blockers.push("the domain is young or was re-used, and reviews and clean scans are easy to fake for new sites");
+  if (signals.some((s) => s.id === "sb" && s.availability === "unavailable")) blockers.push("the malware/phishing check was unavailable");
+  if (signals.some((s) => s.id === "marketplace")) blockers.push("this is a marketplace, where each seller must be assessed separately");
 
   let verdict;
   if (warns.some((s) => s.strength === "authoritative")) verdict = "dangerous";                 // malware/phishing match or insecure payment
   else if (strong.length >= 1 && famsOf([...strong, ...moderate]).size >= 2) verdict = "risky";   // multiple independent strong warnings
   else if (strong.length || moderate.length || famsOf(weak).size >= 2) verdict = "caution";       // one strong warning or several weaker ones
-  else if (positiveFams.size >= 2 && weak.length < 2) verdict = "lower";                          // needs two independent families
+  else if (positiveFams.size >= 2 && weak.length < 2 && !blockers.length) verdict = "lower";      // needs two independent families
   else verdict = "limited";
-  return { verdict, strong, moderate, weak, positives, positiveFams };
+  return { verdict, strong, moderate, weak, positives, positiveFams, blockers };
 }
 
 export function buildReport({ url, domain, signals, reviews, links, flagged, feedback = [], buyerTotal = 0, now = Date.now() }) {
@@ -53,6 +58,7 @@ export function buildReport({ url, domain, signals, reviews, links, flagged, fee
   if (verdict === "dangerous" && signals.some((s) => s.id === "sb" && s.strength === "authoritative")) confidence = "high";
   else if ((verdict === "dangerous" || verdict === "risky") && confidence === "low") confidence = "medium";
 
+  if (verdict === "limited") confidence = "low";          // "limited evidence" and "high confidence" would contradict each other
   const missingChecks = signals.filter((s) => s.availability === "unavailable");
   const setup = signals.filter((s) => SETUP_IDS.has(s.id));
   const shown = signals.filter((s) => !SETUP_IDS.has(s.id) && s.availability !== "unavailable")
@@ -74,6 +80,7 @@ export function buildReport({ url, domain, signals, reviews, links, flagged, fee
   if (!evFams.has("identity")) gaps.push("no verified company record");
   if (missingChecks.length) gaps.push(`${missingChecks.length} check${missingChecks.length === 1 ? "" : "s"} unavailable`);
   if (gaps.length && verdict !== "dangerous") bits.push(`Missing: ${gaps.join(", ")}.`);
+  if (verdict === "limited" && d.positiveFams.size >= 2 && d.blockers.length) bits.push(`Not rated lower risk because ${d.blockers[0]}.`);
   if (buyerTotal) bits.push(`${buyerTotal} unverified customer report${buyerTotal === 1 ? "" : "s"} (not scored).`);
 
   const groups = Object.keys(FAMILIES).map((id) => ({ id, label: FAMILIES[id], signals: shown.filter((s) => s.family === id) })).filter((g) => g.signals.length);

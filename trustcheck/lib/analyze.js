@@ -61,7 +61,11 @@ export async function analyze(url, deps, opts = {}) {
   let reviews = null;
   if (tp) { if (tp.ok) { reviews = tp.v.reviews; sigs.push(...stamp(tp, tp.v.signals)); } else sigs.push(...stamp(tp, [unavailable("tp", "Review-site check", tp.e, "domain")])); }
   let flagged = false;
-  if (sb) { if (sb.ok) { flagged = sb.v.flagged; sigs.push(...stamp(sb, sb.v.signals)); } else sigs.push(...stamp(sb, [unavailable("sb", "Malware/phishing check", sb.e, "url")])); }
+  if (sb) { if (sb.ok) {
+      flagged = sb.v.flagged;
+      const partialUrl = sbUrl !== normalizeUrl(url);        // hover lookups checked the URL WITHOUT its query: not evidence about this page
+      sigs.push(...stamp(sb, partialUrl ? sb.v.signals.map((x) => ({ ...x, partial: true, scope: "url without query", detail: `${x.detail} Checked without the query string, so this does not cover the full link.` })) : sb.v.signals));
+    } else sigs.push(...stamp(sb, [unavailable("sb", "Malware/phishing check", sb.e, "url")])); }
   const summary = buyer?.ok ? buyer.v : null;
   if (buyer && !buyer.ok) sigs.push(...stamp(buyer, [unavailable("buyers", "Buyer-report check", buyer.e, "domain")]));
   if (co) {

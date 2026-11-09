@@ -8,7 +8,7 @@ export const FAMILIES = {
 const FAMILY_BY_ID = {
   https: "safety", ip: "safety", punycode: "safety", tld: "safety", pattern: "safety", subdomains: "safety", lookalike: "safety",
   sb: "safety", "pay-http": "safety",
-  company: "identity", known: "identity",
+  company: "identity", known: "identity", marketplace: "identity",
   tp: "reputation",
   age: "history", archive: "history", reuse: "history", tenant: "history",
   policies: "transparency", urgency: "transparency",
@@ -17,7 +17,7 @@ const FAMILY_BY_ID = {
 };
 const SOURCE_BY_ID = {
   https: "Page address", ip: "Page address", punycode: "Page address", tld: "Page address", pattern: "Page address", subdomains: "Page address",
-  lookalike: "Page address", known: "Built-in retailer list", sb: "Google Safe Browsing", "pay-http": "Page scan",
+  lookalike: "Page address", known: "Built-in retailer list", marketplace: "Built-in marketplace list", sb: "Google Safe Browsing", "pay-http": "Page scan",
   company: "Companies House", tp: "Trustpilot", age: "Domain registry (RDAP)", archive: "Internet Archive", reuse: "Registry + Internet Archive",
   tenant: "Public Suffix List", policies: "Page scan", urgency: "Page scan", price: "Prices on the results page", buyers: "TrustCheck report server"
 };
@@ -47,7 +47,7 @@ export function provenanceOf(s) {
 // Positive evidence that can count towards "lower risk": must come from an independent source about THIS shop.
 // HTTPS, policy links and the page's own claims never qualify; domain age counts (history) but cannot stand alone.
 export function isPositiveEvidence(s) {
-  return s.status === "good" && provenanceOf(s) !== "unavailable" && ["sb", "company", "tp", "age", "known"].includes(s.id);
+  return s.status === "good" && !s.partial && provenanceOf(s) !== "unavailable" && ["sb", "company", "tp", "age", "known"].includes(s.id);
 }
 
 export function annotate(s, { checkedAt = Date.now(), ttlMs = null } = {}) {

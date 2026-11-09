@@ -95,3 +95,32 @@ test("unavailable checks are listed as missing, not as findings", () => {
   assert.equal(r.missingChecks.length, 1); assert.ok(!r.signals.some((s) => s.id === "sb"));
   assert.match(r.summary, /1 check unavailable/);
 });
+
+// ---- rules added after the first evaluation run (eval/): each guards a false-reassurance found there ----
+const sbDown = S("sb", "info", 0, { availability: "unavailable", label: "Malware/phishing check unavailable" });
+test("a young domain cannot earn a positive verdict even with reviews and a clean scan", () => {
+  const r = report(https, S("age", "warn", -15, { verification: "verified" }), sbOk, tpGood);
+  assert.equal(r.verdict, "limited"); assert.match(r.summary, /Not rated lower risk because the domain is young/);
+  assert.equal(report(https, ageOld, sbOk, tpGood).verdict, "lower");               // the same evidence on an established domain still qualifies
+});
+test("a re-used domain cannot earn a positive verdict", () => {
+  assert.notEqual(report(https, ageOld, sbOk, S("reuse", "warn", -10)).verdict, "lower");
+});
+test("an unavailable malware check blocks a positive verdict", () => {
+  const r = report(https, ageOld, company, tpGood, sbDown);
+  assert.equal(r.verdict, "limited"); assert.match(r.summary, /malware\/phishing check was unavailable/);
+});
+test("a marketplace cannot earn a positive verdict for its sellers", () => {
+  const r = report(https, ageOld, company, S("marketplace", "info", 0));
+  assert.equal(r.verdict, "limited"); assert.match(r.summary, /marketplace/);
+});
+test("partial evidence (checked a different URL) never counts as positive", () => {
+  const partialSb = S("sb", "good", 5, { verification: "verified", partial: true });
+  assert.equal(report(https, ageOld, partialSb).verdict, "limited");
+  assert.equal(report(https, ageOld, sbOk).verdict, "lower");
+});
+
+test("'Limited evidence' always carries low confidence, even when many families were checked", () => {
+  const r = report(https, S("age", "warn", -15, { verification: "verified" }), sbOk, tpGood);
+  assert.equal(r.verdict, "limited"); assert.equal(r.confidence, "low"); assert.match(r.headline, /Limited evidence · Low confidence/);
+});

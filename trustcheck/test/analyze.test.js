@@ -111,3 +111,14 @@ test("every signal carries provenance: source, scope, kind, checked and expiry t
   const again = await analyze("https://shop.example/", deps);                                           // cached evidence keeps its ORIGINAL check time
   assert.equal([...again.signals].find((s) => s.id === "age").checkedAt, by("age").checkedAt);
 });
+
+test("hover lookups mark the query-stripped Safe Browsing result as partial, so it cannot support a positive verdict", async () => {
+  const { deps } = setup({ settings: { sbKey: "K" } });
+  const full = await analyze("https://shop.example/p/1?utm_source=g", deps);
+  const hover = await analyze("https://shop.example/p/1?utm_source=g", deps, { hover: true });
+  assert.ok(!full.signals.find((s) => s.id === "sb").partial);
+  const sb = hover.signals.find((s) => s.id === "sb");
+  assert.equal(sb.partial, true); assert.equal(sb.scope, "url without query");
+  const noQuery = await analyze("https://shop.example/p/2", deps, { hover: true });      // no query to drop: still full evidence
+  assert.ok(!noQuery.signals.find((s) => s.id === "sb").partial);
+});
