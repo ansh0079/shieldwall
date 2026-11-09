@@ -6,7 +6,7 @@ import { TabGuard } from "./lib/tabguard.js";
 import { ProviderError } from "./lib/http.js";
 import { domainAge, firstArchived, safeBrowsing, trustpilot } from "./lib/providers.js";
 import { fetchCompany } from "./lib/companies.js";
-import { fetchSummary, submitReport } from "./lib/buyers.js";
+import { fetchSummary, submitReport, enroll, eraseMyReports } from "./lib/buyers.js";
 import { priceContext } from "./lib/price.js";
 
 const providers = { domainAge, firstArchived, safeBrowsing, trustpilot, fetchCompany, fetchSummary };
@@ -85,14 +85,26 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   } else if (msg.type === "submitReport") {
     (async () => {
       try {
-        const { backend, installId } = await chrome.storage.local.get({ backend: "", installId: "" });
+        const { backend, reportToken } = await chrome.storage.local.get({ backend: "", reportToken: "" });
         if (!backend) return reply({ ok: false, error: "No report server set in Options" });
-        let id = installId;
-        if (!id) { id = crypto.randomUUID(); await chrome.storage.local.set({ installId: id }); }
-        await submitReport(backend, id, msg.domain, msg.outcome, msg.tags || []);
+        let token = reportToken;
+        const ensure = async () => { token = await enroll(backend); await chrome.storage.local.set({ reportToken: token }); };
+        if (!token) await ensure();                                   // first report: get a server-issued identity
+        try { await submitReport(backend, token, msg.domain, msg.outcome, msg.tags || []); }
+        catch (e) { if (e.status !== 401) throw e; await ensure(); await submitReport(backend, token, msg.domain, msg.outcome, msg.tags || []); }   // credential revoked or lost: re-enrol once
         await cache.store.remove(["ev:buy:" + msg.domain]);
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab?.url) refresh(tab.id, tab.url, false);
+        reply({ ok: true });
+      } catch (e) { reply({ ok: false, error: String(e.message || e) }); }
+    })();
+    return true;
+  } else if (msg.type === "eraseReports") {
+    (async () => {                                                   // right to erasure: remove my identity and everything it reported
+      try {
+        const { backend, reportToken } = await chrome.storage.local.get({ backend: "", reportToken: "" });
+        if (backend && reportToken) await eraseMyReports(backend, reportToken);
+        await chrome.storage.local.remove(["reportToken", "installId"]);
         reply({ ok: true });
       } catch (e) { reply({ ok: false, error: String(e.message || e) }); }
     })();

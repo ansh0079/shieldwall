@@ -15,3 +15,7 @@ document.getElementById("save").onclick = async () => {
   await chrome.storage.local.remove(Object.keys(keys).filter((k) => /^(ev|fail|net|co):/.test(k)));
   document.getElementById("ok").textContent = "Saved";
 };
+document.getElementById("erase").onclick = async () => {
+  const r = await chrome.runtime.sendMessage({ type: "eraseReports" });
+  document.getElementById("erased").textContent = r?.ok ? "Done: your reports and identity were deleted." : "Could not delete: " + (r?.error || "unknown error");
+};

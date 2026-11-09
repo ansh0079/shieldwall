@@ -2,6 +2,7 @@
 // until the server can issue signed identities and resist bursts (see IMPROVEMENT_PLAN items 5-6).
 import { fetchJson } from "./http.js";
 import { validateBuyerSummary } from "./validate.js";
+import { solvePow } from "./pow.js";
 import { OUTCOMES, TAGS } from "./vocab.js";
 export { OUTCOMES, TAGS };
 
@@ -12,16 +13,32 @@ export async function fetchSummary(base, domain, opts = {}) {
   return validateBuyerSummary(d);
 }
 
-export async function submitReport(base, installId, domain, outcome, tags, opts = {}) {
-  try {
-    return await fetchJson(`${trim(base)}/v1/report`, {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ installId, domain, outcome, tags }), timeoutMs: 8000, maxBytes: 16 * 1024, ...opts
-    });
-  } catch (e) { throw new Error(e?.detail || e?.message || "could not send report"); }
+// Enrolment: fetch a challenge, solve the proof of work, receive a server-signed credential. Identities are issued by the
+// server, rate-limited per network, and carry no weight until they have aged (see server/DEPLOY.md).
+export async function enroll(base, opts = {}) {
+  const c = await fetchJson(`${trim(base)}/v1/challenge`, { timeoutMs: 6000, maxBytes: 4096, ...opts });
+  if (!c || typeof c.challenge !== "string" || !Number.isInteger(c.bits)) throw new Error("unexpected challenge from the report server");
+  const solution = await solvePow(c.challenge, c.bits, opts);
+  const r = await fetchJson(`${trim(base)}/v1/enroll`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ challenge: c.challenge, solution }), timeoutMs: 8000, maxBytes: 4096, ...opts });
+  if (!r || typeof r.token !== "string" || r.token.length > 512) throw new Error("unexpected credential from the report server");
+  return r.token;
 }
 
-export const UNVERIFIED_NOTE = "Anonymous, unverified reports. They are context only, do not change the score, and may not come from independent buyers.";
+const fail = (e) => { const err = new Error(e?.detail || e?.message || "request failed"); err.status = e?.status; return err; };
+export async function submitReport(base, token, domain, outcome, tags, opts = {}) {
+  try {
+    return await fetchJson(`${trim(base)}/v1/report`, {
+      method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ domain, outcome, tags }), timeoutMs: 8000, maxBytes: 16 * 1024, ...opts });
+  } catch (e) { throw fail(e); }
+}
+export async function eraseMyReports(base, token, opts = {}) {
+  try { return await fetchJson(`${trim(base)}/v1/credential`, { method: "DELETE", headers: { authorization: `Bearer ${token}` }, timeoutMs: 8000, maxBytes: 4096, ...opts }); }
+  catch (e) { throw fail(e); }
+}
+
+export const UNVERIFIED_NOTE = "Anonymous, unverified reports. They are context only and do not change the score. Suspicious clusters are held back, but reports can still be wrong or coordinated.";
 
 // Context lines only: points are always 0 and status is always "info".
 export function buyerSignals(sum) {
@@ -35,7 +52,9 @@ export function buyerSignals(sum) {
     : (never + problem) / t >= 0.5 ? `${never + problem} of ${t} unverified reports describe a problem`
     : ok / t >= 0.8 ? `${ok} of ${t} unverified reports say the order arrived fine`
     : `Mixed unverified reports (${ok} fine, ${never + problem} problems)`;
-  return sig(label, `${UNVERIFIED_NOTE} ${t} reports, last ${days} days.`);
+  const extra = [sum.clusters ? `from ${sum.clusters} separate networks` : "", sum.problemRate ? `smoothed problem rate ${Math.round(sum.problemRate.mean * 100)}% (range ${Math.round(sum.problemRate.low * 100)}-${Math.round(sum.problemRate.high * 100)}%)` : "",
+    sum.disputed ? "The merchant has disputed these reports (ownership verified)." : ""].filter(Boolean).join("; ");
+  return sig(label, `${UNVERIFIED_NOTE} ${t} reports, last ${days} days${extra ? "; " + extra : ""}.`);
 }
 
 // Most common reported problems, for the badge / interstitial lists.

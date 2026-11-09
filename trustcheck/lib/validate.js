@@ -64,7 +64,12 @@ export function validateCompany(p) {
 
 export function validateBuyerSummary(s) {
   if (!isObj(s) || typeof s.domain !== "string" || !isInt(s.total)) bad("buyer-report summary");
-  const out = { domain: s.domain, total: s.total, hidden: !!s.hidden, windowDays: isInt(s.windowDays) ? s.windowDays : 30 };
+  const out = { domain: s.domain, total: s.total, hidden: !!s.hidden, windowDays: isInt(s.windowDays) ? s.windowDays : 30, disputed: s.disputed === true };
+  const unit = (x) => typeof x === "number" && x >= 0 && x <= 1;
+  if (s.effectiveN !== undefined) { if (typeof s.effectiveN !== "number" || !(s.effectiveN >= 0 && s.effectiveN < 1e9)) bad("effective count"); out.effectiveN = s.effectiveN; }
+  if (s.clusters !== undefined) { if (!isInt(s.clusters)) bad("cluster count"); out.clusters = s.clusters; }
+  if (s.reported !== undefined) { if (!isInt(s.reported) || !isInt(s.verified ?? 0)) bad("report split"); out.reported = s.reported; out.verified = s.verified ?? 0; }
+  if (s.problemRate !== undefined) { const r = s.problemRate; if (!isObj(r) || !unit(r.mean) || !unit(r.low) || !unit(r.high) || r.low > r.mean + 1e-9 || r.mean > r.high + 1e-9) bad("problem rate"); out.problemRate = { mean: r.mean, low: r.low, high: r.high }; }
   if (s.outcomes !== undefined) {
     const o = s.outcomes;
     if (!isObj(o) || !isInt(o.ok) || !isInt(o.problem) || !isInt(o.never) || o.ok + o.problem + o.never > s.total) bad("buyer-report outcomes");

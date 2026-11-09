@@ -48,20 +48,16 @@ services. Keys and cached results stay in `chrome.storage.local`. No developer s
 ## Roadmap
 Own backend for crowd-submitted reviews, search-result badges, checkout interstitial, Firefox build.
 
-## Buyer-report server (new)
-Buyer outcomes ("did it arrive?" + optional problem tags) are stored by a small dependency-free Node server.
+## Buyer-report server
+Reported experiences ("did it arrive?" plus optional problem tags) are stored by a small dependency-free Node server and shown as
+**unverified context with no effect on the score**. Identities are server-signed and rate-limited, new identities carry no weight,
+coordinated clusters are held back for moderation, and nothing is shown until several separate networks agree. See
+[server/DEPLOY.md](server/DEPLOY.md) for how it works, how to run it, moderation, disputes, deletion and its limits.
 
 ```bash
-node server/server.js            # PORT=8787 DATA_FILE=data.json MIN_REPORTS=3 RATE_LIMIT=20
-node server/seed.js http://localhost:8787 <domain>   # DEMO ONLY: synthetic reports to preview the UI
+node server/server.js                     # dev: PORT=8787, DATA_FILE=data.json (production needs REPORT_SALT and CREDENTIAL_SECRET)
 ```
-Then set the server URL in the extension's Options. Reports are one per anonymous install per shop,
-validated against a fixed tag list, rate-limited per IP, and only shown once `MIN_REPORTS` independent
-buyers have reported in the last 30 days. Counts appear in the badge, hover list and checkout warning as unverified context only.
-
-Deployment (Docker, HTTPS proxy, env vars, backups): see [server/DEPLOY.md](server/DEPLOY.md).
-Still a pilot-grade service: JSON-file storage, basic abuse limits only, no shop dispute process.
-Seeded data is fake - never ship it.
+Then set the server URL in the extension's Options. The Options page can delete your reports and reporting identity.
 
 ## What is sent where
 | Provider | Receives | Notes |

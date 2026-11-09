@@ -1,11 +1,14 @@
-# REPORT_SALT: long random secret (e.g. `openssl rand -hex 32`). Keep it: changing it resets "one report per install".
+# REPORT_SALT and CREDENTIAL_SECRET: long random secrets (e.g. `openssl rand -hex 32`). Keep them: changing REPORT_SALT re-keys network
+# hashes; changing CREDENTIAL_SECRET invalidates every issued credential (clients re-enrol automatically).
 services:
   trustcheck-server:
     build: .
     restart: unless-stopped
     environment:
       REPORT_SALT: ${REPORT_SALT:?set REPORT_SALT}
-      MIN_REPORTS: "3"
+      CREDENTIAL_SECRET: ${CREDENTIAL_SECRET:?set CREDENTIAL_SECRET}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}          # leave empty to disable the moderation API
+      POW_BITS: "16"
     volumes: ["trustcheck-data:/data"]
     ports: ["127.0.0.1:8787:8787"]   # expose only to the local reverse proxy (HTTPS)
 volumes:
