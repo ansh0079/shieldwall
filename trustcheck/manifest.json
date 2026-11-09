@@ -9,6 +9,7 @@
     "https://rdap.org/*",
     "https://safebrowsing.googleapis.com/*",
     "https://api.trustpilot.com/*",
+    "https://api.company-information.service.gov.uk/*",
     "http://localhost:8787/*"
   ],
   "optional_host_permissions": ["https://*/*"],

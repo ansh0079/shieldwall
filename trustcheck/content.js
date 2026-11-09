@@ -17,8 +17,10 @@
     const payButton = [...document.querySelectorAll("button, input[type=submit], a[role=button]")]
       .some((b) => /(pay now|pay with|place (your )?order|complete (your )?(order|purchase)|buy now|paypal|klarna|clearpay)/i.test(b.textContent || b.value || ""));
     const isCheckout = hasPaymentFields || payFrame || payButton || /\/(checkout|payment|pay)(\/|$|\?)/i.test(location.pathname);
+    // Legal footer lines (company number etc.), sent so the background can verify the company.
+    const legal = (document.body?.innerText || "").split(/\n/).filter((l) => l.length < 240 && /(company|registered|registration|reg\.?)\s*(no|number|#)/i.test(l)).slice(0, 4);
     return {
-      isShop, hasPaymentFields, isCheckout,
+      isShop, hasPaymentFields, isCheckout, legal, title: (document.title || "").slice(0, 120),
       hasContact: has(/contact/) || !!document.querySelector('a[href^="mailto:"], a[href^="tel:"]'),
       hasReturns: has(/return|refund|shipping/),
       hasPrivacyTerms: has(/privacy|terms/),

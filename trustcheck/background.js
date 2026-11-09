@@ -2,6 +2,7 @@ import { registrableDomain } from "./lib/domain.js";
 import { urlSignals, pageSignals } from "./lib/heuristics.js";
 import { domainAge, safeBrowsing, trustpilot, reviewLinks } from "./lib/providers.js";
 import { buildReport } from "./lib/score.js";
+import { extractCompanyNumber, fetchCompany, companySignals } from "./lib/companies.js";
 import { fetchSummary, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
 
 const TTL = 6 * 3600 * 1000;
@@ -10,7 +11,7 @@ const buyerCache = new Map(); // domain -> {at,sum}
 const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626" };
 
 async function settings() {
-  const s = await chrome.storage.local.get({ sbKey: "", tpKey: "", backend: "" });
+  const s = await chrome.storage.local.get({ sbKey: "", tpKey: "", backend: "", chKey: "" });
   return s;
 }
 
@@ -20,7 +21,7 @@ async function analyze(url, tabId, force = false) {
   if (!/^https?:$/.test(u.protocol)) return null;
   const domain = registrableDomain(u.hostname);
   const cacheKey = "net:" + domain;
-  const { sbKey, tpKey, backend } = await settings();
+  const { sbKey, tpKey, backend, chKey } = await settings();
 
   // Network results are per-domain and cached; local/page signals are recomputed.
   let net = (await chrome.storage.local.get(cacheKey))[cacheKey];
@@ -52,7 +53,24 @@ async function analyze(url, tabId, force = false) {
   }
 
   const scan = pageScans.get(tabId);
-  const signals = [...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...buyerSignals(buyer)];
+
+  // Companies House: verify the company number shown in the shop's footer (cached 24h per number).
+  let companySigs = [];
+  const number = scan ? extractCompanyNumber((scan.legal || []).join(" ")) : null;
+  if (chKey && number) {
+    const ck = "co:" + number;
+    let rec = (await chrome.storage.local.get(ck))[ck];
+    if (!rec || Date.now() - rec.at > 24 * 3600 * 1000) {
+      try { rec = { at: Date.now(), profile: await fetchCompany(number, chKey) }; await chrome.storage.local.set({ [ck]: rec }); }
+      catch { rec = null; }
+    }
+    if (rec) companySigs = companySignals({ number, profile: rec.profile, haystack: `${scan.title} ${domain} ${(scan.legal || []).join(" ")}` });
+  } else if (chKey && scan?.isShop && !number) {
+    companySigs = [{ id: "company", label: "No company registration number shown", status: "info", points: 0, detail: "UK traders normally show their company number in the site footer." }];
+  }
+
+  const signals = [...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...buyerSignals(buyer), ...companySigs];
+  if (!chKey) signals.push({ id: "co-off", label: "UK company check not connected", status: "info", points: 0, detail: "Add a free Companies House API key in Options to verify a shop's registered company." });
   if (!sbKey) signals.push({ id: "sb-off", label: "Malware/phishing database not connected", status: "info", points: 0, detail: "Add a free Google Safe Browsing key in Options for stronger protection." });
   if (!tpKey) signals.push({ id: "tp-off", label: "Review-site scores not connected", status: "info", points: 0, detail: "Add a Trustpilot API key in Options, or use the review links below." });
   const report = buildReport({ url, domain, signals, reviews: net.reviews, links: reviewLinks(domain), flagged: net.flagged,

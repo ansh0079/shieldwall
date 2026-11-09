@@ -10,7 +10,8 @@ whether the store they're on can be trusted. Separate from QuietBrowse; shares n
 | Domain age | RDAP (rdap.org) | no |
 | Contact / returns / privacy / about pages, payment form on HTTP, urgency tactics | page scan | no |
 | Malware & phishing blocklists | Google Safe Browsing | yes (free) |
-| Customer review score | Trustpilot API | yes |
+| Customer review score + recurring complaint themes | Trustpilot API (paid add-on) | yes |
+| UK company number in footer verified (exists, active, age, name matches) | Companies House API | yes (free) |
 | Links to Trustpilot, ScamAdviser, Reddit, Google, WHOIS | deep links | no |
 
 Score = 50 + sum of signal points, clamped to 0-100. 70+ trusted, 40-69 caution, below 40 risky.

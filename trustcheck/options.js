@@ -1,5 +1,5 @@
-const f = { sbKey: document.getElementById("sb"), tpKey: document.getElementById("tp"), backend: document.getElementById("be") };
-chrome.storage.local.get({ sbKey: "", tpKey: "", backend: "" }).then((s) => { for (const k in f) f[k].value = s[k]; });
+const f = { sbKey: document.getElementById("sb"), tpKey: document.getElementById("tp"), backend: document.getElementById("be"), chKey: document.getElementById("ch") };
+chrome.storage.local.get({ sbKey: "", tpKey: "", backend: "", chKey: "" }).then((s) => { for (const k in f) f[k].value = s[k]; });
 document.getElementById("save").onclick = async () => {
   const v = Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.value.trim()]));
   if (v.backend) {
