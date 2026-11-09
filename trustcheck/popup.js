@@ -1,7 +1,10 @@
 import { TAGS } from "./lib/buyers.js";
 const $ = (id) => document.getElementById(id);
 let current = null, outcome = null; const picked = new Set();
-const LABEL = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk", unverified: "Unverified shop" };
+const PROV = { verified: "Verified", inferred: "Inferred", "user-reported": "Unverified user report", unavailable: "Unavailable", stale: "Stale" };
+const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+const item = (s, detail) => { const li = el("li", s.status), d = el("div"); d.append(el("span", "", s.label)); if (detail) d.append(el("small", "", detail)); li.append(el("i"), d); return li; };
 
 function render(r) {
   $("loading").hidden = true;
@@ -11,33 +14,41 @@ function render(r) {
   $("main").hidden = false;
   $("report").hidden = false;
   if (!r.backendOn) { $("rs1").hidden = true; $("rs2").hidden = true; $("rmsg").hidden = false; $("rmsg").textContent = "Set a report server in Options to share and see buyer reports."; }
-  $("ring").className = r.verdict; $("ring").textContent = r.verdict === "unverified" ? "?" : r.score;
-  $("verdict").textContent = LABEL[r.verdict]; $("domain").textContent = r.domain;
+  $("ring").className = r.verdict; $("ring").textContent = r.verdict === "limited" ? "?" : r.verdict === "dangerous" ? "!" : r.score;
+  $("ring").setAttribute("aria-label", `Evidence score ${r.score} of 100`);
+  $("verdict").textContent = r.verdictLabel; $("domain").textContent = r.domain;
+  $("conf").textContent = r.verdict === "limited" ? `${r.confidenceLabel} confidence · not enough evidence for a score` : `${r.confidenceLabel} confidence · evidence score ${r.score}/100`;
+  $("summary").textContent = r.summary || "";
+  $("findings").textContent = "";
+  for (const f of r.findings || []) $("findings").append(item(f));
+  $("findingsH").hidden = !(r.findings || []).length;
   $("history").textContent = "";
-  for (const h of r.history || []) { const d = document.createElement("div"); d.textContent = h; $("history").append(d); }
+  for (const h of r.history || []) $("history").append(el("div", "", h));
   $("reviews").textContent = "";
   if (r.reviews) {
-    const a = document.createElement("a");
+    const a = el("a", "", `${r.reviews.source}: ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews`);
     a.href = r.reviews.url; a.target = "_blank"; a.rel = "noreferrer";
-    a.textContent = `${r.reviews.source}: ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews`;
     $("reviews").append(a);
-    for (const th of r.reviews.themes || []) {
-      const d = document.createElement("div");
-      d.textContent = `${th.count} of ${r.reviews.sample} recent reviews: ${th.label}`;
-      $("reviews").append(d);
-    }
+    for (const th of r.reviews.themes || []) $("reviews").append(el("div", "", `${th.count} of ${r.reviews.sample} recent reviews: ${th.label}`));
   }
-  $("signals").textContent = "";
-  for (const s of r.signals) {
-    const li = document.createElement("li"); li.className = s.status;
-    const dot = document.createElement("i"), d = document.createElement("div");
-    d.textContent = s.label;
-    const sm = document.createElement("small"); sm.textContent = s.detail || ""; d.append(sm);
-    li.append(dot, d); $("signals").append(li);
+  $("missing").textContent = "";
+  for (const m of r.missingChecks || []) $("missing").append(item(m, m.explanation));
+  $("missingWrap").hidden = !(r.missingChecks || []).length;
+  $("groups").textContent = "";
+  for (const g of r.groups || []) {
+    const box = el("section"); box.append(el("h3", "", g.label));
+    const ul = el("ul");
+    for (const s of g.signals) ul.append(item(s, `${s.explanation && s.explanation !== s.label ? s.explanation + " " : ""}${s.source} · ${PROV[s.provenance] || s.provenance} · checked ${ago(s.checkedAt)}${s.effect ? ` · ${s.effect > 0 ? "+" : ""}${s.effect} points` : ""}`));
+    box.append(ul); $("groups").append(box);
   }
+  $("setup").textContent = "";
+  for (const s of r.setup || []) $("setup").append(item(s, s.explanation));
+  $("setupWrap").hidden = !(r.setup || []).length;
+  $("disclaimer").textContent = r.disclaimer || "TrustCheck cannot guarantee a seller or a transaction.";
+  $("fresh").textContent = `Checked ${ago(r.checkedAt)}`;
   $("links").textContent = "";
   for (const l of r.links) {
-    const a = document.createElement("a"); a.href = l.url; a.target = "_blank"; a.rel = "noreferrer"; a.textContent = l.name;
+    const a = el("a", "", l.name); a.href = l.url; a.target = "_blank"; a.rel = "noreferrer";
     $("links").append(a);
   }
 }

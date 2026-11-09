@@ -19,8 +19,23 @@ whether the store they're on can be trusted. Separate from QuietBrowse; shares n
 
 Buyer reports are shown as **unverified context** and have **no effect on the score** until reporting is abuse-resistant (see PLAN_STATUS.md).
 
-Score = 50 + sum of signal points, clamped to 0-100. 70+ trusted, 40-69 caution, below 40 risky.
-A Safe Browsing hit caps the score at 10. Risky pages get an in-page warning banner.
+## How an assessment is made
+Signals are grouped into independent **evidence families**: site safety, business identity, reputation, operational history,
+store transparency and price. The verdict comes from decision rules, not from a score threshold:
+
+| Verdict | When |
+|---|---|
+| **Dangerous** | an authoritative malware/phishing match for this exact page, or a payment form on an insecure page |
+| **High risk** | strong warnings from at least two independent families (price is only ever supporting) |
+| **Caution** | one strong warning, a price anomaly, or weaker warnings from two families |
+| **Limited evidence** | not enough independent evidence either way (the common case without API keys) |
+| **Lower risk indicators** | verified evidence from at least two independent families, no strong warning, evidence score 70+ |
+
+HTTPS, policy links and domain age alone can never produce "Lower risk indicators". Every signal records its source, scope,
+provenance (verified / inferred / user-reported / unavailable), check time and expiry. Unavailable checks are listed as
+missing, never counted as clean. Confidence (Low/Medium/High) reflects how many independent families produced evidence.
+The evidence score (0-100) is always kept consistent with the verdict. Only the two most severe verdicts interrupt a checkout.
+TrustCheck cannot guarantee a seller or a transaction.
 
 ## Run
 `chrome://extensions` -> Developer mode -> Load unpacked -> select this `trustcheck/` folder.
@@ -42,7 +57,7 @@ node server/seed.js http://localhost:8787 <domain>   # DEMO ONLY: synthetic repo
 ```
 Then set the server URL in the extension's Options. Reports are one per anonymous install per shop,
 validated against a fixed tag list, rate-limited per IP, and only shown once `MIN_REPORTS` independent
-buyers have reported in the last 30 days. Counts feed the score, the badge hover list and the checkout warning.
+buyers have reported in the last 30 days. Counts appear in the badge, hover list and checkout warning as unverified context only.
 
 Deployment (Docker, HTTPS proxy, env vars, backups): see [server/DEPLOY.md](server/DEPLOY.md).
 Still a pilot-grade service: JSON-file storage, basic abuse limits only, no shop dispute process.

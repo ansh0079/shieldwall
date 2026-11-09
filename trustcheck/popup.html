@@ -1,16 +1,20 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><link rel="stylesheet" href="popup.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="popup.css"></head>
 <body>
-  <div id="loading">Checking this site…</div>
+  <div id="loading" role="status">Checking this site…</div>
   <main id="main" hidden>
     <header>
-      <div id="ring"><span id="score"></span></div>
-      <div><h1 id="verdict"></h1><p id="domain"></p></div>
+      <div id="ring" role="img"><span id="score"></span></div>
+      <div><h1 id="verdict"></h1><p id="domain"></p><p id="conf" class="small"></p></div>
     </header>
-    <div id="reviews"></div>
-    <h2>Why this score</h2>
-    <ul id="signals"></ul>
+    <p id="summary"></p>
+    <h2 id="findingsH">Key findings</h2>
+    <ul id="findings"></ul>
     <div id="history"></div>
+    <div id="reviews"></div>
+    <section id="missingWrap" hidden><h2>Not checked</h2><ul id="missing"></ul></section>
+    <h2>Evidence</h2>
+    <div id="groups"></div>
     <h2>Report your experience</h2>
     <div id="report">
       <div id="rs1"><p>Did your order from this shop arrive?</p>
@@ -20,7 +24,9 @@
     </div>
     <h2>Check independent reviews</h2>
     <div id="links"></div>
-    <footer><button id="recheck">Re-check</button><a href="#" id="opts">Options</a></footer>
+    <details id="setupWrap" hidden><summary>Setup: connect more checks</summary><ul id="setup"></ul></details>
+    <p id="disclaimer" class="small"></p>
+    <footer><button id="recheck">Re-check</button><span id="fresh" class="small"></span><a href="#" id="opts">Options</a></footer>
   </main>
   <script type="module" src="popup.js"></script>
 </body></html>

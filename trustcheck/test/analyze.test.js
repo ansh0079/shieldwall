@@ -46,8 +46,8 @@ test("Safe Browsing checks the complete URL and caches per URL", async () => {
   const { deps, calls } = setup({ settings: { sbKey: "K" } });
   const home = await analyze("https://shop.example/", deps);
   const pay = await analyze("https://shop.example/checkout?cart=1#step2", deps);
-  assert.notEqual(home.verdict, "risky");
-  assert.equal(pay.verdict, "risky"); assert.ok(pay.score <= 10);       // a clean homepage cannot mark a flagged checkout clean
+  assert.notEqual(home.verdict, "dangerous");
+  assert.equal(pay.verdict, "dangerous"); assert.ok(pay.score <= 10);   // a clean homepage cannot mark a flagged checkout clean
   assert.deepEqual(calls.filter((c) => c[0] === "sb").map((c) => c[1]), ["https://shop.example/", "https://shop.example/checkout?cart=1"]);
   const again = await analyze("https://shop.example/", deps);          // re-checking one URL cannot disturb the other
   assert.equal(again.verdict, home.verdict);
@@ -58,17 +58,18 @@ test("a provider failure is 'unavailable', never a clean result, and is only cac
   let n = 0;
   const { deps, tick } = setup({ settings: { sbKey: "K" }, providers: { safeBrowsing: async () => { n++; throw new ProviderError("timeout", "safebrowsing.googleapis.com: timed out after 8s"); } } });
   const r = await analyze("https://shop.example/pay", deps);
-  const sig = r.signals.find((s) => s.id === "sb");
+  const sig = r.missingChecks.find((s) => s.id === "sb");
   assert.equal(sig.status, "info"); assert.equal(sig.availability, "unavailable"); assert.equal(sig.points, 0);
+  assert.equal(sig.provenance, "unavailable");
   assert.match(sig.detail, /missing, not clean/);
-  assert.ok(!r.signals.some((s) => s.id === "sb" && s.status === "good"));
+  assert.ok(![...r.signals, ...r.missingChecks].some((s) => s.id === "sb" && s.status === "good"));
   await analyze("https://shop.example/pay", deps); assert.equal(n, 1);   // failure cached briefly: no request storm
   tick(61_000); await analyze("https://shop.example/pay", deps); assert.equal(n, 2);
 });
 test("one failing provider does not hide the others", async () => {
   const { deps } = setup({ providers: { domainAge: async () => { throw new ProviderError("network", "rdap.org: Failed to fetch"); } } });
   const r = await analyze("https://shop.example/", deps);
-  assert.ok(r.signals.some((s) => s.id === "age" && s.availability === "unavailable"));
+  assert.ok(r.missingChecks.some((s) => s.id === "age" && s.availability === "unavailable"));
   assert.equal(r.archived, "2015-06-01T00:00:00Z");
 });
 test("Safe Browsing TTL is configurable", async () => {
@@ -93,4 +94,20 @@ test("malformed URLs and hosts", async () => {
   const { deps } = setup();
   assert.equal(await analyze("not a url", deps), null); assert.equal(await analyze("ftp://x.com/", deps), null);
   assert.equal((await analyze("https://www.google.co.uk/search?q=x", deps)).neutral, true);
+});
+
+test("every signal carries provenance: source, scope, kind, checked and expiry times", async () => {
+  const { deps, tick } = setup({ settings: { sbKey: "K", backend: "https://reports.example" },
+    providers: { fetchSummary: async () => ({ domain: "shop.example", total: 6, windowDays: 30, outcomes: { ok: 1, problem: 1, never: 4 }, tags: {} }) } });
+  const r = await analyze("https://shop.example/", deps);
+  const by = (id) => [...r.signals, ...r.missingChecks].find((s) => s.id === id);
+  for (const s of r.signals) for (const k of ["family", "source", "scope", "provenance", "effect", "checkedAt", "explanation"]) assert.ok(s[k] !== undefined, `${s.id}.${k}`);
+  assert.equal(by("sb").provenance, "verified"); assert.equal(by("sb").scope, "url"); assert.equal(by("sb").source, "Google Safe Browsing");
+  assert.equal(by("sb").expiresAt - by("sb").checkedAt, 30 * 60_000);
+  assert.equal(by("age").source, "Domain registry (RDAP)"); assert.equal(by("age").expiresAt - by("age").checkedAt, 6 * 3600_000);
+  assert.equal(by("https").provenance, "inferred"); assert.equal(by("https").expiresAt, null);        // local heuristic: never "expires"
+  assert.equal(by("buyers").provenance, "user-reported");
+  tick(5 * 60_000);
+  const again = await analyze("https://shop.example/", deps);                                           // cached evidence keeps its ORIGINAL check time
+  assert.equal([...again.signals].find((s) => s.id === "age").checkedAt, by("age").checkedAt);
 });

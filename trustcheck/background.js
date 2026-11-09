@@ -13,7 +13,7 @@ const providers = { domainAge, firstArchived, safeBrowsing, trustpilot, fetchCom
 const cache = new EvidenceCache(chromeStore(chrome.storage.local, ["ev:", "fail:", "net:", "co:"]));
 const guard = new TabGuard();
 const pageScans = new Map();                       // tabId -> { url, scan }  (a scan only applies to the URL it came from)
-const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
+const COLORS = { lower: "#16a34a", caution: "#d97706", risky: "#dc2626", dangerous: "#7f1d1d", limited: "#6b7280" };
 const quiet = (p) => Promise.resolve(p).catch(() => {});   // closed tabs reject action/tab calls
 
 cache.prune().catch(() => {});                     // drop expired + legacy cache entries on service-worker start
@@ -29,7 +29,7 @@ async function priceFor(domain) {
 async function publish(tabId, report) {
   if (!report || report.neutral) quiet(chrome.action.setBadgeText({ tabId, text: "" }));
   else {
-    quiet(chrome.action.setBadgeText({ tabId, text: report.verdict === "unverified" ? "?" : String(report.score) }));
+    quiet(chrome.action.setBadgeText({ tabId, text: report.verdict === "limited" ? "?" : report.verdict === "dangerous" ? "!" : String(report.score) }));
     quiet(chrome.action.setBadgeBackgroundColor({ tabId, color: COLORS[report.verdict] }));
   }
   if (report) {

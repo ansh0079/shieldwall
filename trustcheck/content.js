@@ -45,8 +45,10 @@
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
 
   // ---------- live badge: auto drop-down, hover for feedback points ----------
-  const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
-  const WORDS = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk", unverified: "Unverified shop" };
+  const COLORS = { lower: "#16a34a", caution: "#d97706", risky: "#dc2626", dangerous: "#7f1d1d", limited: "#6b7280" };
+  const WORDS = { lower: "Lower risk indicators", caution: "Caution", risky: "High risk", dangerous: "Dangerous", limited: "Limited evidence" };
+  const severe = (v) => v === "risky" || v === "dangerous";          // the only verdicts allowed to interrupt a checkout
+  const DISCLAIMER = "TrustCheck cannot guarantee a seller or a transaction.";
   let host, root, hidden = false, shownFor = "", lastKey = "", hovering = false;
 
   function ensureHost() {
@@ -62,7 +64,7 @@
   function feedbackPoints(r) {
     const pts = [];
     for (const h of r.history || []) pts.push({ status: "info", text: h });
-    if (r.verdict === "unverified") pts.push({ status: "warn", text: "No reviews, buyer reports or domain history found for this shop" });
+    if (r.verdict === "limited") pts.push({ status: "warn", text: "Not enough independent evidence found about this shop to judge it" });
     if (r.buyerTotal) pts.push({ status: "info", text: `${r.buyerTotal} unverified buyer reports (30 days, not scored)` });
     for (const f of r.feedback || []) pts.push({ status: "info", text: `${f.count} unverified reports: ${f.label}` });
     if (r.reviews) pts.push({ status: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad",
@@ -102,10 +104,10 @@
       .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.info i{background:#9ca3af}`;
     const drop = document.createElement("div"); drop.className = "drop";
     const bar = document.createElement("div"); bar.className = "bar";
-    const sc = document.createElement("div"); sc.className = "score"; sc.textContent = r.verdict === "unverified" ? "?" : r.score;
+    const sc = document.createElement("div"); sc.className = "score"; sc.textContent = r.verdict === "limited" ? "?" : r.verdict === "dangerous" ? "!" : r.score; sc.setAttribute("aria-label", `Evidence score ${r.score} of 100`);
     const tx = document.createElement("div");
-    const v = document.createElement("div"); v.className = "v"; v.textContent = WORDS[r.verdict];
-    const sub = document.createElement("div"); sub.className = "sub"; sub.textContent = r.verdict === "unverified" ? "Nothing known about this shop yet" : "Hover for what buyers & checks say";
+    const v = document.createElement("div"); v.className = "v"; v.textContent = r.verdictLabel || WORDS[r.verdict];
+    const sub = document.createElement("div"); sub.className = "sub"; sub.textContent = `${r.confidenceLabel || "Low"} confidence · hover for details`;
     tx.append(v, sub);
     const x = document.createElement("button"); x.className = "x"; x.textContent = "\u00d7"; x.title = "Hide for this page";
     x.onclick = () => { hidden = true; host.remove(); };
@@ -118,12 +120,13 @@
       const i = document.createElement("i"), l = document.createElement("span"); l.textContent = pt.text;
       d.append(i, l); more.append(d);
     }
+    const disc = document.createElement("div"); disc.className = "sub"; disc.textContent = DISCLAIMER; disc.style.marginTop = "6px"; more.append(disc);
     drop.append(bar, more);
     root.append(style, drop);
 
     // Hover on the badge opens the feedback points; the state survives a rebuild.
     drop.addEventListener("mouseenter", () => { hovering = true; drop.classList.add("open"); });
-    drop.addEventListener("mouseleave", () => { hovering = false; if (r.verdict !== "risky") drop.classList.remove("open"); });
+    drop.addEventListener("mouseleave", () => { hovering = false; if (!severe(r.verdict)) drop.classList.remove("open"); });
     if (hovering) drop.classList.add("open");
 
     // Slide in only when first shown; a rebuild appears in place.
@@ -134,8 +137,8 @@
     if (pageKey !== shownFor) {
       shownFor = pageKey;
       drop.classList.add("open");
-      if (r.verdict !== "risky") setTimeout(() => { if (!hovering) root.querySelector(".drop")?.classList.remove("open"); }, 4000);
-    } else if (!hovering && r.verdict !== "risky" && !fresh) {
+      if (!severe(r.verdict)) setTimeout(() => { if (!hovering) root.querySelector(".drop")?.classList.remove("open"); }, 4000);
+    } else if (!hovering && !severe(r.verdict) && !fresh) {
       /* keep whatever state the user left */
     }
   }
@@ -146,7 +149,7 @@
   let claimed = false;   // set synchronously so concurrent reports can't show two overlays
 
   async function maybeInterstitial(r) {
-    if (claimed || r.verdict !== "risky") return;
+    if (claimed || !severe(r.verdict)) return;
     let isCheckout = false;
     try { isCheckout = scan().isCheckout; } catch { /* ignore */ }
     if (!isCheckout) return;
@@ -179,8 +182,8 @@
     const card = document.createElement("div"); card.className = "card";
     card.setAttribute("role", "alertdialog"); card.setAttribute("aria-label", "TrustCheck warning");
     const add = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; card.append(e); return e; };
-    add("h1", "", "Think twice before paying here");
-    add("div", "sc", `${r.domain} scored ${r.score}/100 on TrustCheck`);
+    add("h1", "", r.verdict === "dangerous" ? "Do not enter payment details here" : "Think twice before paying here");
+    add("div", "sc", `${r.domain}: ${r.headline || r.verdictLabel}`);
 
     const reasons = document.createElement("ul");
     const pts = [];
@@ -195,6 +198,7 @@
       li.append(i, t); reasons.append(li);
     }
     add("h2", "", "Why we're warning you"); card.append(reasons);
+    if (r.missingChecks?.length) add("div", "sc", `${r.missingChecks.length} check${r.missingChecks.length === 1 ? "" : "s"} could not run, so this may be incomplete.`);
 
     add("h2", "", "Safer steps");
     const tips = document.createElement("ul"); tips.className = "tips";
@@ -212,6 +216,7 @@
     const cont = document.createElement("button"); cont.className = "cont"; cont.textContent = "I understand the risk, continue";
     cont.onclick = async () => { try { await chrome.storage.local.set({ [ackKey]: Date.now() }); } catch { /* ignore */ } overlay.remove(); };
     row.append(go, cont); card.append(row);
+    add("div", "sc", DISCLAIMER);
 
     bg.append(card); sh.append(st, bg);
     document.documentElement.appendChild(overlay);

@@ -19,12 +19,17 @@ test("real retailer not flagged as lookalike", () => {
   const s = ids(urlSignals("https://www.amazon.com/"));
   assert.ok(s.includes("known") && !s.includes("lookalike"));
 });
-test("http + ip is risky", () => {
-  assert.equal(rep("http://192.168.4.4/pay").verdict, "risky");
+test("http + raw IP is a strong warning but, from one family, not yet 'high risk'", () => {
+  const r = rep("http://192.168.4.4/pay");
+  assert.equal(r.verdict, "caution"); assert.ok(r.score <= 69);
 });
-test("safe browsing flag caps score", () => {
-  const r = buildReport({ url: "https://x.com", domain: "x.com", signals: [{ points: 50, status: "good" }], links: [], flagged: true });
-  assert.ok(r.score <= 10 && r.verdict === "risky");
+test("insecure payment form is dangerous", () => {
+  const r = rep("http://shop.example/pay", pageSignals({ hasPaymentFields: true, https: false }));
+  assert.equal(r.verdict, "dangerous"); assert.ok(r.score <= 10);
+});
+test("safe browsing flag caps score and forces 'dangerous'", () => {
+  const r = buildReport({ url: "https://x.com", domain: "x.com", signals: [{ id: "age", points: 50, status: "good" }], links: [], flagged: true });
+  assert.ok(r.score <= 10 && r.verdict === "dangerous");
 });
 test("missing store policies penalised", () => {
   const s = pageSignals({ isShop: true, https: true });

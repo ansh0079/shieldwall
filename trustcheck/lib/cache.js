@@ -19,14 +19,16 @@ export class EvidenceCache {
   async set(key, v) { await this.store.set("ev:" + key, { v, at: this.now() }); }
   async getFail(key) { const f = await this.store.get("fail:" + key); return f && this.now() - f.at <= this.failTtlMs ? f : undefined; }
   async setFail(key, e) { await this.store.set("fail:" + key, { kind: e?.kind || "network", message: String(e?.message || e).slice(0, 120), at: this.now() }); }
-  async cached(key, ttlMs, fn, { force = false } = {}) {
+  async cached(key, ttlMs, fn, opts) { return (await this.cachedMeta(key, ttlMs, fn, opts)).v; }
+  // Like cached(), but also returns when the evidence was actually fetched ({ v, at }) for provenance.
+  async cachedMeta(key, ttlMs, fn, { force = false } = {}) {
     if (!force) {
       const hit = await this.get(key, ttlMs);
-      if (hit) return hit.v;
+      if (hit) return { v: hit.v, at: hit.at };
       const f = await this.getFail(key);
       if (f) throw new ProviderError(f.kind, f.message, { cachedFailure: true });
     }
-    try { const v = await fn(); await this.set(key, v); return v; }
+    try { const v = await fn(), at = this.now(); await this.store.set("ev:" + key, { v, at }); return { v, at }; }
     catch (e) { if (!(e instanceof ProviderError && e.kind === "aborted")) await this.setFail(key, e); throw e; }
   }
   // Drop entries older than maxAgeMs (and legacy-format keys) so storage cannot grow without bound.
