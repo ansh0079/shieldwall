@@ -39,5 +39,6 @@ Then set the server URL in the extension's Options. Reports are one per anonymou
 validated against a fixed tag list, rate-limited per IP, and only shown once `MIN_REPORTS` independent
 buyers have reported in the last 30 days. Counts feed the score, the badge hover list and the checkout warning.
 
-Not production-ready: no auth/abuse detection beyond the above, a JSON file for storage, IP rate limiting
-that is unreliable behind proxies, and no shop dispute process. Seeded data is fake - never ship it.
+Deployment (Docker, HTTPS proxy, env vars, backups): see [server/DEPLOY.md](server/DEPLOY.md).
+Still a pilot-grade service: JSON-file storage, basic abuse limits only, no shop dispute process.
+Seeded data is fake - never ship it.
