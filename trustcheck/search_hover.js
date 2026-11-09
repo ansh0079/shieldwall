@@ -1,9 +1,11 @@
 // On search / shopping pages: hover a result to see the seller's rating in a side card.
 // Only the domain of the result you hover is ever looked up.
 (() => {
-  if (window.top !== window) return;
   const SEARCH = /(^|\.)(google|bing|duckduckgo|yahoo|ecosia|startpage|brave|yandex|baidu|qwant)\.[a-z.]+$/i;
   if (!SEARCH.test(location.hostname)) return;
+  // Diagnostic marker: check `document.documentElement.dataset.trustcheckHover` in the page console.
+  document.documentElement.dataset.trustcheckHover = window.top === window ? "active" : "active-frame";
+  console.debug("[TrustCheck] hover script active", window.top === window ? "(top page)" : "(frame)", location.href.slice(0, 80));
 
   const PARAMS = ["url", "q", "adurl", "dest", "dest_url", "u", "ued"];
   // Real destination of a result link, unwrapping the engine's redirect wrappers.
