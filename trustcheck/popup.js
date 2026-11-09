@@ -6,6 +6,7 @@ const LABEL = { trusted: "Looks trustworthy", caution: "Proceed with caution", r
 function render(r) {
   $("loading").hidden = true;
   if (!r) { $("loading").hidden = false; $("loading").textContent = "Open a website to check it."; return; }
+  if (r.neutral) { $("loading").hidden = false; $("loading").textContent = "This is a search page, not a shop. Open a shop's own page to see its rating."; return; }
   current = r;
   $("main").hidden = false;
   $("report").hidden = false;

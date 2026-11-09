@@ -71,6 +71,7 @@
   }
 
   function render(r) {
+    if (r.neutral) { host?.remove(); return; }   // search pages: no rating to show
     if (hidden) return;
     ensureHost();
     const color = COLORS[r.verdict];

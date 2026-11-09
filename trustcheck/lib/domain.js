@@ -28,3 +28,13 @@ export function levenshtein(a, b) {
       );
   return dp[a.length][b.length];
 }
+
+// Search engines are not shops: rating the engine's own domain says nothing about the results on it.
+const SEARCH_LABELS = new Set(["google", "bing", "duckduckgo", "yahoo", "ecosia", "startpage", "brave", "yandex", "baidu", "qwant"]);
+export function isSearchEngine(hostname) {
+  const h = hostname.toLowerCase();
+  const parts = h.split(".");
+  if (parts.length < 2) return false;
+  const reg = registrableDomain(h).split(".");
+  return SEARCH_LABELS.has(reg[0]) && reg.length >= 2;
+}

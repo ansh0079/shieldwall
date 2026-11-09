@@ -1,4 +1,4 @@
-import { registrableDomain } from "./lib/domain.js";
+import { registrableDomain, isSearchEngine } from "./lib/domain.js";
 import { urlSignals, pageSignals } from "./lib/heuristics.js";
 import { domainAge, safeBrowsing, trustpilot, reviewLinks } from "./lib/providers.js";
 import { buildReport } from "./lib/score.js";
@@ -20,6 +20,7 @@ async function analyze(url, tabId, force = false) {
   try { u = new URL(url); } catch { return null; }
   if (!/^https?:$/.test(u.protocol)) return null;
   const domain = registrableDomain(u.hostname);
+  if (isSearchEngine(u.hostname)) return { neutral: true, url, domain, verdict: "neutral", signals: [], links: [], feedback: [], checkedAt: Date.now() };
   const cacheKey = "net:" + domain;
   const { sbKey, tpKey, backend, chKey } = await settings();
 
@@ -82,6 +83,12 @@ async function analyze(url, tabId, force = false) {
 async function refresh(tabId, url, force) {
   const report = await analyze(url, tabId, force);
   if (!report) { chrome.action.setBadgeText({ tabId, text: "" }); return null; }
+  if (report.neutral) {
+    chrome.action.setBadgeText({ tabId, text: "" });
+    await chrome.storage.session?.set({ ["report:" + tabId]: report });
+    chrome.tabs.sendMessage(tabId, { type: "report", report }).catch(() => {});
+    return report;
+  }
   chrome.action.setBadgeText({ tabId, text: String(report.score) });
   chrome.action.setBadgeBackgroundColor({ tabId, color: COLORS[report.verdict] });
   await chrome.storage.session?.set({ ["report:" + tabId]: report });
