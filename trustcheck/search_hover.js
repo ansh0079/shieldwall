@@ -20,15 +20,15 @@
 
   // Smallest card-sized ancestor of the hovered element that holds a resolvable seller link.
   function findCard(el) {
-    let n = el, sawLink = false;
+    let n = el, unresolved = null;
     for (let i = 0; n && n !== document.body && i < 8; i++, n = n.parentElement) {
       const r = n.getBoundingClientRect();
       if (r.width > 560 || r.height > 720) break;                       // too big: a whole grid, not one result
       const links = n.matches("a[href]") ? [n] : [...n.querySelectorAll("a[href]")];
-      if (links.length) sawLink = true;
       for (const a of links) { const d = destination(a); if (d) return { card: n, url: d }; }
+      if (links.length && !unresolved) unresolved = { card: n, url: null, hrefs: links.slice(0, 5).map((a) => a.href) };
     }
-    return sawLink ? { card: null } : null;
+    return unresolved;     // card found, but no seller website could be read from its links
   }
 
   const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626" };
@@ -91,13 +91,17 @@
     if (host && e.composedPath().includes(host)) return;
     const hit = findCard(e.target);
     clearTimeout(showTimer);
-    if (!hit || !hit.card) return hide();      // no result card, or no identifiable seller: clear any old card
+    if (!hit) return hide();
     clearTimeout(hideTimer);
     if (hit.card && hit.card === current) return;
     showTimer = setTimeout(async () => {
       const my = ++token;
       current = hit.card;
       const rect = hit.card.getBoundingClientRect();
+      if (!hit.url) {
+        console.debug("[TrustCheck] could not read a seller website from this result. Links seen:", hit.hrefs);
+        return note(rect, "TrustCheck can't read this seller's website from the listing. Open the shop to see its rating.");
+      }
       let domain; try { domain = new URL(hit.url).hostname.replace(/^www\./, ""); } catch { return; }
       note(rect, `Checking ${domain}...`);
       let report = null;
