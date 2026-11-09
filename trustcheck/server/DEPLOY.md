@@ -4,22 +4,34 @@ The server stores anonymous **reported experiences** ("did your order arrive?").
 shows them but they have **no effect on the score**. Read "What this cannot stop" before relying on them.
 
 ## Run it
+Requires **Node 22+** (uses the built-in `node:sqlite`; the Docker image provides it). Data lives in one SQLite file (WAL mode) plus a backup directory.
 ```bash
 export REPORT_SALT=$(openssl rand -hex 32)          # network hashes (keep it)
 export CREDENTIAL_SECRET=$(openssl rand -hex 32)    # signs credentials (changing it makes every client re-enrol)
-export ADMIN_TOKEN=$(openssl rand -hex 24)          # optional: enables /admin/* (moderation)
+export ALLOWED_ORIGINS=chrome-extension://<your-extension-id>
+export TRUSTED_PROXIES=<your reverse proxy's address, e.g. 172.18.0.0/16>
+export ADMIN_TOKENS="alice:$(openssl rand -hex 24)"  # optional: enables /admin/*; "name:token", several allowed
 docker compose up -d --build
 ```
-Put HTTPS in front (Caddy: `reports.example.com { reverse_proxy 127.0.0.1:8787 }`). Keep `TRUST_PROXY=true` only behind a proxy that
-sets `X-Forwarded-For`, otherwise anyone can fake an address and dodge every network limit. Then set the URL in the extension's Options.
+Put HTTPS in front (Caddy: `reports.example.com { reverse_proxy 127.0.0.1:8787 }`). Then set the URL in the extension's Options.
+With `NODE_ENV=production` (the image default) the server **refuses to start** without strong `REPORT_SALT`/`CREDENTIAL_SECRET` (32+ chars),
+`BACKUP_DIR` and `ALLOWED_ORIGINS`, and rejects the old `TRUST_PROXY` flag. `X-Forwarded-For` is believed only from `TRUSTED_PROXIES`.
 
 | Variable | Purpose |
 |---|---|
-| `REPORT_SALT`, `CREDENTIAL_SECRET` | required in production |
-| `ADMIN_TOKEN` | enables the moderation API; leave unset to disable it |
+| `REPORT_SALT`, `CREDENTIAL_SECRET` | required in production, 32+ chars |
+| `ALLOWED_ORIGINS` | comma list of allowed browser origins (required in production) |
+| `TRUSTED_PROXIES` | CIDR list of reverse proxies whose `X-Forwarded-For` is trusted |
+| `ADMIN_TOKENS`, `ADMIN_CIDRS` | named moderator tokens (24+ chars); optional network allow-list for `/admin/*` |
+| `DATABASE_FILE` (`/data/data.db`), `BACKUP_DIR` (`/data/backups`) | database and backups; `BACKUP_EVERY_HOURS`, `BACKUP_KEEP` control the schedule |
+| `ALERT_WEBHOOK_URL` | https URL that receives de-duplicated alerts (backup stale, audit chain broken, disk errors, ...) |
 | `POW_BITS` (16) | proof-of-work difficulty for enrolment |
-| `REPORT_CONFIG_JSON` | override any value in `abuse.js` `DEFAULTS`, e.g. `{"display":{"minEffective":8}}` |
-| `DATA_FILE`, `PORT`, `RATE_LIMIT`, `CORS_ORIGIN`, `TRUST_PROXY` | as named |
+| `MAX_CONNECTIONS`, `MAX_CONCURRENT_PER_IP`, `RATE_LIMIT`, `READ_LIMIT` | connection and request limits |
+| `REPORT_CONFIG_JSON` | override any value in `abuse.js` `DEFAULTS`, e.g. `{"display":{"minEffective":8}}` (validated at boot) |
+
+Endpoints for operators: `/healthz` (liveness), `/readyz` (database reachable, schema current; 503 while draining), `/metrics` (Prometheus text, admin token).
+CLI: `node server/cli.js status | migrate [--dry-run] | backup | verify <file> | restore <backup> [target] [--force] | list-backups | import-json <file>`.
+Upgrading from the old JSON-file server: `node server/cli.js import-json data.json` (see RUNBOOK.md).
 
 ## How reports are protected
 | Control | What it does |
@@ -34,9 +46,9 @@ sets `X-Forwarded-For`, otherwise anyone can fake an address and dodge every net
 | **Verified vs reported** | Counted separately. No purchase verifier is configured, so nothing is verified; a supplied proof is ignored unless a verifier exists. |
 | **Quiet quarantine** | The submitter is never told whether a report was held back, so attackers cannot probe the rules. |
 
-## Moderation (needs `ADMIN_TOKEN`)
+## Moderation (needs `ADMIN_TOKENS`)
 ```bash
-H="authorization: Bearer $ADMIN_TOKEN"
+H="authorization: Bearer <your token>"
 curl -H "$H" https://reports.example.com/admin/queue                                  # held-back reports with reasons
 curl -H "$H" -d '{"ids":["<id>"],"action":"approve"}' https://reports.example.com/admin/reports/moderate   # approve | reject | restore
 curl -X POST -H "$H" https://reports.example.com/admin/credentials/<credentialId>/revoke
@@ -70,11 +82,13 @@ No names, emails or IPs. IPs exist in memory only for rate limiting.
   a large shared network (a university) is throttled even when honest.
 - **Honest mistakes and genuine bad experiences that are not fraud.** Reports describe experiences, not intent.
 - **Purchase verification does not exist yet.** Until a verifier is built, every report is an unverified claim.
-- **Single process and a JSON file.** Rate-limit counters live in memory and reset on restart; the store is one file. Move to a database
-  (plan item 15) before real scale. A pre-credential data file is backed up as `data.json.v1.bak` and not read.
+- **Single process and a single SQLite file.** Rate-limit counters that guard abuse are persisted, but there is exactly one writer: no
+  high availability, no horizontal scaling. Backups bound data loss to the backup interval (default 6 h): changes since the last backup are
+  lost on disaster. Move to PostgreSQL when you need more than one instance, a recovery point under minutes, or sustained writes beyond
+  what one disk handles (see RUNBOOK.md).
 - The thresholds are reasoned defaults, not tuned on real attacks. Treat them as a starting point and watch the moderation queue.
 
 ## Before real users
 Write a privacy policy matching "What is stored"; decide who moderates, how fast disputes are answered, and how an appeal works;
-set up backups of the data volume and the audit-verify alert; and get legal advice about publishing reports about named businesses.
-`node server/seed.js <domain>` writes **demo-only** data (stop the server first, use the same secrets); never run it on a real deployment.
+copy backups off the data volume and wire `ALERT_WEBHOOK_URL`; and get legal advice about publishing reports about named businesses.
+`node server/seed.js <domain>` writes **demo-only** data into `DATABASE_FILE` (stop the server first, use the same secrets); never run it on a real deployment.

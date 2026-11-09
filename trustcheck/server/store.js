@@ -17,6 +17,7 @@ export class ReportStore {
   constructor({ file = ":memory:", db = null, now = () => Date.now(), salt = "dev-salt", secret = "dev-secret", config = {}, fetchText = null, verifyPurchase = null, metrics = null } = {}) {
     Object.assign(this, { now, salt, secret, cfg: mergeConfig(config), fetchText, verifyPurchase, metrics });
     this.sumCache = new Map();                                // domain -> { at, value, w }
+    this.flagCache = new Map();                               // domain -> ids held back at the last submit (so a submit evaluates once, not twice)
     this.db = db || new Database(file);
     migrate(this.db, { now });
   }
@@ -85,10 +86,13 @@ export class ReportStore {
         const n = this.db.get("SELECT COUNT(*) AS n FROM reports WHERE domain = ? AND at > ? AND id_age_ms < ? AND cred != ?", domain, t - DAY, youngMs, c.id).n;
         if (n >= L.newIdentityReportsPerDomainPerDay) fixed.push("velocity");
       }
-      const before = this._flaggedIds(domain), ev = verified ? "verified" : "reported";
+      const before = this.flagCache.get(domain) ?? this._flaggedIds(domain), ev = verified ? "verified" : "reported";   // a stale "before" only affects an informational audit line
       if (existing) this.db.run("UPDATE reports SET outcome = ?, tags = ?, at = ?, net = ?, id_age_ms = ?, evidence = ?, fixed = ?, edits = edits + 1, mod = NULL WHERE id = ?", outcome, tags2, t, net, idAgeMs, ev, JSON.stringify(fixed), existing.id);
       else this.db.run("INSERT INTO reports (id, domain, cred, net, outcome, tags, at, id_age_ms, evidence, fixed, edits, mod) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)", rid(), domain, c.id, net, outcome, tags2, t, idAgeMs, ev, JSON.stringify(fixed));
-      const fresh = [...this._flaggedIds(domain)].filter((id) => !before.has(id));
+      const after = this._flaggedIds(domain);
+      if (this.flagCache.size > 5000) this.flagCache.clear();
+      this.flagCache.set(domain, after);
+      const fresh = [...after].filter((id) => !before.has(id));
       if (fresh.length) { this._audit("system", "quarantine", domain, `${fresh.length} report(s) held back from scoring`); this.count("reports_quarantined_total", fresh.length); }
       this.count("reports_submitted_total");
       return { ok: true };                                    // the caller is never told whether a report was held back

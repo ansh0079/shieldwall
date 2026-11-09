@@ -1,13 +1,13 @@
 // DEMO ONLY: writes synthetic, naturally-spread reports straight into a data file so you can see the UI.
 // Stop the server first. Use the SAME REPORT_SALT / CREDENTIAL_SECRET as the server. Never use against a real deployment.
-// usage: DATA_FILE=data.json node server/seed.js shop.example
+// usage: DATABASE_FILE=demo.db node server/seed.js shop.example
 import { ReportStore } from "./store.js";
 import { solvePowSync } from "./credentials.js";
 
 const domain = process.argv[2] || "shop.example";
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 let t = Date.now() - 12 * DAY;
-const store = new ReportStore({ file: process.env.DATA_FILE || "data.json", now: () => t, salt: process.env.REPORT_SALT || "dev-salt",
+const store = new ReportStore({ file: process.env.DATABASE_FILE || "demo.db", now: () => t, salt: process.env.REPORT_SALT || "dev-salt",
   secret: process.env.CREDENTIAL_SECRET || "dev-secret", config: { powBits: 1, limits: { enrollPerHour: 1000 } } });
 const plan = [["never", ["fake_tracking"], 14], ["problem", ["counterfeit", "not_as_described"], 6], ["problem", ["delayed"], 4], ["ok", [], 2]];
 const toks = []; let i = 0;

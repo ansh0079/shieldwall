@@ -44,6 +44,13 @@ jobs:
       - name: Run TrustCheck tests
         working-directory: trustcheck
         run: npm test
+        env:
+          TEST_REQUIRE_ALL: ${{ matrix.node == '22' && '1' || '' }}   # Node 22 must run every file; 18/20 skip the SQLite ones
+
+      - name: Server self-test (crash, load, fuzz, shutdown, backup drill)
+        if: matrix.node == '22'
+        working-directory: trustcheck
+        run: node test/selftest/run.mjs crash concurrency fuzz shutdown backup prodboot
 
       - name: Evaluation gates (development set + verdict drift)
         working-directory: trustcheck
