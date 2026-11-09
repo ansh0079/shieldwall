@@ -33,8 +33,8 @@
     return unresolved;     // card found, but no seller website could be read from its links
   }
 
-  const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626" };
-  const WORDS = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk" };
+  const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
+  const WORDS = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk", unverified: "Unverified shop" };
   let host, shadow, current = null, showTimer = null, hideTimer = null, token = 0;
 
   function ensure() {
@@ -49,6 +49,7 @@
 
   function points(r) {
     const pts = [];
+    if (r.verdict === "unverified") pts.push({ s: "warn", t: "No reviews, buyer reports or domain history found for this shop" });
     if (r.buyerTotal) pts.push({ s: "info", t: `Based on ${r.buyerTotal} buyer reports (30 days)` });
     for (const f of r.feedback || []) pts.push({ s: "bad", t: `${f.count} buyers: ${f.label}` });
     if (r.reviews) pts.push({ s: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad", t: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
@@ -78,7 +79,7 @@
 
   function render(rect, domain, r) {
     show(rect, (c) => {
-      const top = el("div", "top"), sc = el("div", "sc", r.score), tx = el("div");
+      const top = el("div", "top"), sc = el("div", "sc", r.verdict === "unverified" ? "?" : r.score), tx = el("div");
       sc.style.background = COLORS[r.verdict];
       const v = el("div", "v", WORDS[r.verdict]); v.style.color = COLORS[r.verdict];
       tx.append(v, el("div", "d", domain)); top.append(sc, tx); c.append(top);

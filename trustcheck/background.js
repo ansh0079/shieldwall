@@ -8,7 +8,7 @@ import { fetchSummary, submitReport, buyerSignals, buyerFeedback } from "./lib/b
 const TTL = 6 * 3600 * 1000;
 const pageScans = new Map(); // tabId -> scan
 const buyerCache = new Map(); // domain -> {at,sum}
-const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626" };
+const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
 
 async function settings() {
   const s = await chrome.storage.local.get({ sbKey: "", tpKey: "", backend: "", chKey: "" });
@@ -89,7 +89,7 @@ async function refresh(tabId, url, force) {
     chrome.tabs.sendMessage(tabId, { type: "report", report }).catch(() => {});
     return report;
   }
-  chrome.action.setBadgeText({ tabId, text: String(report.score) });
+  chrome.action.setBadgeText({ tabId, text: report.verdict === "unverified" ? "?" : String(report.score) });
   chrome.action.setBadgeBackgroundColor({ tabId, color: COLORS[report.verdict] });
   await chrome.storage.session?.set({ ["report:" + tabId]: report });
   chrome.tabs.sendMessage(tabId, { type: "report", report }).catch(() => {});

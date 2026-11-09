@@ -1,7 +1,7 @@
 import { TAGS } from "./lib/buyers.js";
 const $ = (id) => document.getElementById(id);
 let current = null, outcome = null; const picked = new Set();
-const LABEL = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk" };
+const LABEL = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk", unverified: "Unverified shop" };
 
 function render(r) {
   $("loading").hidden = true;
@@ -11,7 +11,7 @@ function render(r) {
   $("main").hidden = false;
   $("report").hidden = false;
   if (!r.backendOn) { $("rs1").hidden = true; $("rs2").hidden = true; $("rmsg").hidden = false; $("rmsg").textContent = "Set a report server in Options to share and see buyer reports."; }
-  $("ring").className = r.verdict; $("ring").textContent = r.score;
+  $("ring").className = r.verdict; $("ring").textContent = r.verdict === "unverified" ? "?" : r.score;
   $("verdict").textContent = LABEL[r.verdict]; $("domain").textContent = r.domain;
   $("reviews").textContent = "";
   if (r.reviews) {

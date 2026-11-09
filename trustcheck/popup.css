@@ -22,3 +22,4 @@ footer{display:flex;justify-content:space-between;margin-top:12px}
 #chips button{padding:3px 8px;border:1px solid var(--line);border-radius:12px;background:none;color:inherit;cursor:pointer;font-size:12px}
 #chips button.on{background:var(--fg);color:var(--bg)}
 #report p{margin:4px 0;color:var(--fg)}
+.unverified{background:#6b7280}

@@ -45,8 +45,8 @@
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
 
   // ---------- live badge: auto drop-down, hover for feedback points ----------
-  const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626" };
-  const WORDS = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk" };
+  const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
+  const WORDS = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk", unverified: "Unverified shop" };
   let host, root, hidden = false, shownFor = "", lastKey = "", hovering = false;
 
   function ensureHost() {
@@ -61,6 +61,7 @@
   // Feedback points: buyer-report tags when available (r.feedback), then review-site score, then key findings.
   function feedbackPoints(r) {
     const pts = [];
+    if (r.verdict === "unverified") pts.push({ status: "warn", text: "No reviews, buyer reports or domain history found for this shop" });
     if (r.buyerTotal) pts.push({ status: "info", text: `Based on ${r.buyerTotal} buyer reports (30 days)` });
     for (const f of r.feedback || []) pts.push({ status: "bad", text: `${f.count} buyers: ${f.label}` });
     if (r.reviews) pts.push({ status: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad",
@@ -100,10 +101,10 @@
       .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.info i{background:#9ca3af}`;
     const drop = document.createElement("div"); drop.className = "drop";
     const bar = document.createElement("div"); bar.className = "bar";
-    const sc = document.createElement("div"); sc.className = "score"; sc.textContent = r.score;
+    const sc = document.createElement("div"); sc.className = "score"; sc.textContent = r.verdict === "unverified" ? "?" : r.score;
     const tx = document.createElement("div");
     const v = document.createElement("div"); v.className = "v"; v.textContent = WORDS[r.verdict];
-    const sub = document.createElement("div"); sub.className = "sub"; sub.textContent = "Hover for what buyers & checks say";
+    const sub = document.createElement("div"); sub.className = "sub"; sub.textContent = r.verdict === "unverified" ? "Nothing known about this shop yet" : "Hover for what buyers & checks say";
     tx.append(v, sub);
     const x = document.createElement("button"); x.className = "x"; x.textContent = "\u00d7"; x.title = "Hide for this page";
     x.onclick = () => { hidden = true; host.remove(); };
