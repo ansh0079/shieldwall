@@ -34,7 +34,7 @@ async function analyze(url, tabId, force = false) {
     net = {
       at: Date.now(),
       signals: [
-        ...(age.status === "fulfilled" ? age.value : [{ id: "age", label: "Domain age unavailable", status: "info", points: 0, detail: "RDAP lookup failed or not supported for this TLD." }]),
+        ...(age.status === "fulfilled" ? age.value : [{ id: "age", label: "Domain age unavailable", status: "info", points: 0, detail: "Lookup failed: " + String(age.reason?.message || age.reason).slice(0, 160) }]),
         ...(sb.value ? sb.value.signals : []),
         ...(tp.value ? tp.value.signals : [])
       ],

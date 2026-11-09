@@ -2,8 +2,21 @@ import { summarizeThemes } from "./themes.js";
 // Network providers. Only the registrable domain is ever sent to third parties.
 const ok = async (res) => { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); };
 
+// rdap.org redirects to the registry; for .com/.net also try Verisign's registry directly (confirmed endpoint).
+export async function rdapLookup(domain) {
+  const d = encodeURIComponent(domain), tld = domain.split(".").pop();
+  const urls = [`https://rdap.org/domain/${d}`];
+  if (tld === "com" || tld === "net") urls.push(`https://rdap.verisign.com/${tld}/v1/domain/${d}`);
+  const errors = [];
+  for (const u of urls) {
+    try { return await ok(await fetch(u, { headers: { accept: "application/rdap+json" } })); }
+    catch (e) { errors.push(`${new URL(u).host}: ${e.message}`); }
+  }
+  throw new Error(errors.join("; "));
+}
+
 export async function domainAge(domain) {
-  const data = await ok(await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`, { headers: { accept: "application/rdap+json" } }));
+  const data = await rdapLookup(domain);
   const reg = (data.events || []).find((e) => e.eventAction === "registration");
   if (!reg) return [];
   const days = Math.floor((Date.now() - new Date(reg.eventDate).getTime()) / 86400000);

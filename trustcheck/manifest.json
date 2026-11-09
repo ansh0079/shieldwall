@@ -10,6 +10,7 @@
   ],
   "host_permissions": [
     "https://rdap.org/*",
+    "https://rdap.verisign.com/*",
     "https://safebrowsing.googleapis.com/*",
     "https://api.trustpilot.com/*",
     "https://api.company-information.service.gov.uk/*",
