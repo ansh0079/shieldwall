@@ -40,6 +40,9 @@ jobs:
           CHROME="$(ls -d "$PLAYWRIGHT_BROWSERS_PATH"/chromium-*/chrome-linux*/chrome | head -1)"
           test -x "$CHROME" && "$CHROME" --version
           echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+          # Ubuntu 24.04 runners block unprivileged user namespaces via AppArmor, which kills Chromium's sandbox at
+          # start-up ("Chrome did not expose a DevTools port"). Allow them on this throwaway CI VM so the sandbox stays on.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Run browser behavior tests
         working-directory: quietbrowse
