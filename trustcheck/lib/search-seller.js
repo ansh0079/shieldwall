@@ -18,5 +18,24 @@
     return null;
   }
 
-  globalThis.TrustCheckSearch = Object.freeze({ explicitSellerUrl });
+  const productWords = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  function sameProduct(cardText, panelHeading) {
+    const card = productWords(cardText), heading = productWords(panelHeading);
+    return heading.length >= 12 && (` ${card} `).includes(` ${heading} `);
+  }
+
+  function visibleSellerName(text) {
+    const lines = String(text || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    const price = lines.findIndex((x) => /^[£$€]\s?\d/.test(x));
+    if (price < 0) return null;
+    for (const line of lines.slice(price + 1, price + 5)) {
+      if (line.length < 2 || line.length > 60) continue;
+      if (!/[a-z]/i.test(line) || /^& more$/i.test(line)) continue;
+      if (/(delivery|returns?|in stock|rating|reviews?|usually|was £|off$)/i.test(line)) continue;
+      return line.replace(/\s+& more$/i, "").trim() || null;
+    }
+    return null;
+  }
+
+  globalThis.TrustCheckSearch = Object.freeze({ explicitSellerUrl, sameProduct, visibleSellerName });
 })();
