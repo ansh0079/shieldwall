@@ -20,31 +20,13 @@ whether the store they're on can be trusted. Separate from QuietBrowse; shares n
 Score = 50 + sum of signal points, clamped to 0-100. 70+ trusted, 40-69 caution, below 40 risky.
 A Safe Browsing hit caps the score at 10. Risky pages get an in-page warning banner.
 
-## Run
-`chrome://extensions` -> Developer mode -> Load unpacked -> select this `trustcheck/` folder.
-Add API keys under Options. Tests: `npm test`.
+## Run & Test
+- Unpacked: `chrome://extensions` -> Developer mode -> Load unpacked -> select `trustcheck/` folder.
+- Run tests: `npm test`
+- Build production release archives: `npm run pack` (outputs Chrome & Firefox `.zip` and `.xpi` in `dist/`).
 
-## Privacy
-Only the registrable domain (RDAP) or page URL (Safe Browsing) is sent to those services.
-Buyer outcomes go only to the report server explicitly configured in Options. Keys and cached results
-stay in `chrome.storage.local`; receipt text, payment details, addresses and product details are not collected.
-
-## Roadmap
-Own backend for crowd-submitted reviews, search-result badges, checkout interstitial, Firefox build.
-
-## Buyer-report server (new)
-Buyer outcomes ("did it arrive?" + optional problem tags) are stored by a small dependency-free Node server.
-
-```bash
-node server/server.js            # PORT=8787 DATA_FILE=data.json MIN_REPORTS=3 RATE_LIMIT=20
-node server/seed.js http://localhost:8787 <domain>   # DEMO ONLY: synthetic reports to preview the UI
-```
-Then set the server URL in the extension's Options. Reports are one per anonymous install per shop.
-When TrustCheck sees an order-confirmation page, the next report is labelled purchase-observed; no receipt,
-order number, product, address, payment details or page text is retained. Reports are
-validated against a fixed tag list, rate-limited per IP, and only shown once `MIN_REPORTS` independent
-buyers have reported in the last 30 days. Counts feed the score, the badge hover list and the checkout warning.
-
-Deployment (Docker, HTTPS proxy, env vars, backups): see [server/DEPLOY.md](server/DEPLOY.md).
-Still a pilot-grade service: JSON-file storage, basic abuse limits only, no shop dispute process.
-Seeded data is fake - never ship it.
+## Unified Cloud Check Endpoint
+The report server (`server/server.js`) supports unified caching and proxying:
+- `GET /v1/check?domain=<domain>&url=<url>&companyNumber=<number>`: returns community buyer reports, verified merchant status, and proxied Safe Browsing / Companies House results in a single call.
+- Environment variables: `GOOGLE_SAFE_BROWSING_KEY`, `COMPANIES_HOUSE_KEY`, `DATABASE_FILE` (or `DATA_FILE`, supporting `.sqlite`), `PORT` (default 8787).
+- Deployment instructions: see [server/DEPLOY.md](server/DEPLOY.md).

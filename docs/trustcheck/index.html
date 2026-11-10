@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TrustCheck — Real-Time Shopping Safety & Scam Protection</title>
+  <meta name="description" content="Shop with confidence. TrustCheck unmasks fake stores, brand lookalikes, payment hijackers, and artificial discounts in real time directly in your browser." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #090d16;
+      --surface: #111827;
+      --surface-border: #1f2937;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --primary: #10b981;
+      --primary-hover: #059669;
+      --caution: #f59e0b;
+      --danger: #ef4444;
+      --brand-accent: #06b6d4;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: var(--brand-accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Nav */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(12px);
+      background: rgba(9, 13, 22, 0.85);
+      border-bottom: 1px solid var(--surface-border);
+    }
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: "Space Grotesk", sans-serif;
+      font-weight: 700;
+      font-size: 20px;
+      color: #fff;
+      text-decoration: none !important;
+    }
+    .logo-badge {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #10b981, #06b6d4);
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 16px;
+      color: #fff;
+    }
+    .nav-links {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .nav-links a { color: var(--text-muted); }
+    .nav-links a:hover { color: #fff; text-decoration: none; }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      padding: clamp(60px, 10vw, 120px) 24px 80px;
+      max-width: 1200px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 9999px;
+      margin-bottom: 24px;
+    }
+    .pill-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 10px #10b981; }
+    h1 {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: clamp(2.5rem, 6vw, 4.2rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      background: linear-gradient(180deg, #ffffff 40%, #9ca3af 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      max-width: 680px;
+      margin: 0 auto 40px;
+      font-size: clamp(1.1rem, 2vw, 1.25rem);
+      color: var(--text-muted);
+    }
+    .cta-group {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 15px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      text-decoration: none !important;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #06241a;
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+    }
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(16, 185, 129, 0.35);
+    }
+    .btn-secondary {
+      background: var(--surface);
+      color: #fff;
+      border: 1px solid var(--surface-border);
+    }
+    .btn-secondary:hover {
+      background: #1f2937;
+      transform: translateY(-2px);
+    }
+
+    /* Live Interactive Demo Visual */
+    .preview-section {
+      max-width: 900px;
+      margin: 40px auto 100px;
+      padding: 0 24px;
+    }
+    .preview-card {
+      background: #151d2f;
+      border: 1px solid #23314d;
+      border-radius: 20px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+      overflow: hidden;
+    }
+    .browser-bar {
+      background: #0d1322;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .browser-dots { display: flex; gap: 6px; }
+    .browser-dot { width: 10px; height: 10px; border-radius: 50%; background: #334155; }
+    .browser-url {
+      flex: 1;
+      background: #1e293b;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #94a3b8;
+      font-family: monospace;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .browser-url span { color: #e2e8f0; font-weight: 600; }
+    .demo-content {
+      padding: 36px 30px;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 32px;
+      align-items: center;
+    }
+    @media (max-width: 768px) {
+      .demo-content { grid-template-columns: 1fr; }
+    }
+    .shop-sample {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 24px;
+      border: 1px dashed #334155;
+    }
+    .shop-sample h3 { font-size: 18px; margin-bottom: 8px; }
+    .shop-sample p { color: #94a3b8; font-size: 14px; margin-bottom: 16px; }
+    .price-tag { font-size: 24px; font-weight: 700; color: #38bdf8; }
+
+    /* TrustCheck Widget Mockup */
+    .widget-mockup {
+      background: #ffffff;
+      color: #111827;
+      border-radius: 14px;
+      border-top: 5px solid var(--primary);
+      box-shadow: 0 16px 36px rgba(0,0,0,0.4);
+      padding: 16px;
+      font-size: 13px;
+    }
+    .widget-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .widget-ring {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 800;
+      font-size: 17px;
+      display: grid;
+      place-items: center;
+    }
+    .widget-title { font-weight: 700; color: #111827; font-size: 14px; }
+    .widget-subtitle { font-size: 12px; color: #6b7280; }
+    .widget-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-top: 1px solid #f3f4f6;
+      font-size: 12px;
+      color: #374151;
+    }
+    .w-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+    .w-dot.warn { background: var(--caution); }
+
+    /* Features Grid */
+    .section-title {
+      text-align: center;
+      max-width: 600px;
+      margin: 0 auto 60px;
+    }
+    .section-title h2 {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      margin-bottom: 12px;
+    }
+    .section-title p { color: var(--text-muted); }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      max-width: 1200px;
+      margin: 0 auto 120px;
+      padding: 0 24px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 16px;
+      padding: 28px;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .feature-card:hover {
+      border-color: #374151;
+      transform: translateY(-3px);
+    }
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.12);
+      color: #10b981;
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      margin-bottom: 20px;
+    }
+    .feature-card h3 { font-size: 19px; margin-bottom: 10px; }
+    .feature-card p { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+
+    /* Privacy Banner */
+    .privacy-banner {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 182, 212, 0.08) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 20px;
+      max-width: 1200px;
+      margin: 0 auto 100px;
+      padding: 48px;
+      display: flex;
+      align-items: center;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+    .privacy-content { flex: 1; min-width: 280px; }
+    .privacy-content h2 { font-size: 28px; margin-bottom: 12px; }
+    .privacy-content p { color: var(--text-muted); margin-bottom: 20px; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--surface-border);
+      padding: 48px 24px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .footer-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .footer-links { display: flex; gap: 20px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="nav-container">
+      <a href="index.html" class="logo">
+        <div class="logo-badge">✓</div>
+        TrustCheck
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="https://github.com/ansh0079/shieldwall" target="_blank" rel="noreferrer">GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="pill">
+        <span class="pill-dot"></span>
+        Zero Tracking · Open Source · Manifest V3
+      </div>
+      <h1>Shop with confidence.<br>Catch scam stores before you pay.</h1>
+      <p class="subtitle">
+        TrustCheck unmasks brand typosquats, checks domain registration against Wayback Machine archives, stops payment skimmers, and detects fake liquidation discounts in real time.
+      </p>
+      <div class="cta-group">
+        <a href="https://chromewebstore.google.com/" class="btn btn-primary" target="_blank" rel="noreferrer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 18.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13z"/></svg>
+          Add to Chrome — Free
+        </a>
+        <a href="https://addons.mozilla.org/" class="btn btn-secondary" target="_blank" rel="noreferrer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 6.63 5.37 12 12 12s12-5.37 12-12c0-6.63-5.37-12-12-12zm0 21.6c-5.3 0-9.6-4.3-9.6-9.6 0-5.3 4.3-9.6 9.6-9.6 5.3 0 9.6 4.3 9.6 9.6 0 5.3-4.3 9.6-9.6 9.6z"/></svg>
+          Get for Firefox
+        </a>
+      </div>
+    </section>
+
+    <!-- Visual Interactive Preview -->
+    <section class="preview-section" id="how-it-works">
+      <div class="preview-card">
+        <div class="browser-bar">
+          <div class="browser-dots">
+            <div class="browser-dot"></div>
+            <div class="browser-dot"></div>
+            <div class="browser-dot"></div>
+          </div>
+          <div class="browser-url">
+            🔒 https://<span>footy.com</span>/products/asics-gel-kayano-31
+          </div>
+        </div>
+        <div class="demo-content">
+          <div class="shop-sample">
+            <h3>Asics Gel-Kayano 31 (Men's)</h3>
+            <p>Verified retailer deal listing with direct merchant checkout.</p>
+            <div class="price-tag">£99.00</div>
+          </div>
+          <div class="widget-mockup">
+            <div class="widget-top">
+              <div class="widget-ring">75</div>
+              <div>
+                <div class="widget-title">Lower risk indicators</div>
+                <div class="widget-subtitle">High confidence · footy.com</div>
+              </div>
+            </div>
+            <div class="widget-item">
+              <span class="w-dot"></span>
+              <span>Domain registered: Feb 1996 (30.7 yrs)</span>
+            </div>
+            <div class="widget-item">
+              <span class="w-dot"></span>
+              <span>First seen online: Dec 1996 (29.9 yrs)</span>
+            </div>
+            <div class="widget-item">
+              <span class="w-dot"></span>
+              <span>Encrypted connection (HTTPS)</span>
+            </div>
+            <div class="widget-item">
+              <span class="w-dot"></span>
+              <span>Price matches Google Shopping median</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Key Threat Protections -->
+    <section class="features" id="features">
+      <div class="section-title">
+        <h2>Multi-Pillar Shopping Defense</h2>
+        <p>Most blockers only check a static domain list. TrustCheck runs real-time forensic tests on every store you visit.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3>Brand Typosquat Detection</h3>
+          <p>Scammers register domains like <code>amaz0n.com</code> or <code>nike-clearance-outlet.com</code>. TrustCheck de-leets characters and checks token boundaries to catch impostors instantly.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⏱️</div>
+          <h3>Domain Age vs. Archive Timeline</h3>
+          <p>Buying an expired 10-year-old domain is a favorite scam tactic. TrustCheck cross-references registry creation with Wayback Machine history to detect newly repurposed sites.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">💳</div>
+          <h3>Payment Hijacking & Skimmers</h3>
+          <p>Detects checkout forms submitting card details to unapproved third-party servers before you click Pay (Magecart & form-hijack protection).</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📉</div>
+          <h3>Search Price Outliers</h3>
+          <p>When searching on Google Shopping, TrustCheck compares each seller's price against the results median. 70%-off liquidation lures are flagged before you leave search.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🏛️</div>
+          <h3>Corporate Registry Verification</h3>
+          <p>Extracts claimed company registration and EU/UK VAT numbers from footers, validating whether the registered entity is active, brand-new, or dissolved.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">👥</div>
+          <h3>Verified Buyer Signal Network</h3>
+          <p>Separates real order confirmations from fake 5-star claims. Reports from actual checkout confirmations build transparent, crowd-sourced trust metrics.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Privacy Banner -->
+    <section class="privacy-banner">
+      <div class="privacy-content">
+        <h2>Your browsing history belongs to you.</h2>
+        <p>TrustCheck never transmits complete page URLs, form data, or search terms. Only the registrable domain name is checked against safety registries. No account required, zero tracking cookies, and completely open source.</p>
+        <a href="privacy.html" class="btn btn-secondary">Read Full Privacy Policy →</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-container">
+      <div>
+        <strong>TrustCheck</strong> — Part of the Shieldwall open-source browser security project.
+      </div>
+      <div class="footer-links">
+        <a href="privacy.html">Privacy Policy</a>
+        <a href="../privacy.html">QuietBrowse</a>
+        <a href="https://github.com/ansh0079/shieldwall">Source Code</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

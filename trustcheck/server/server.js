@@ -3,6 +3,8 @@
 //      TRUST_PROXY(false: set true behind a reverse proxy) CORS_ORIGIN(*) REPORT_SALT(required in production)
 import http from "node:http";
 import { Store } from "./store.js";
+import { safeBrowsing } from "../lib/providers.js";
+import { fetchCompany } from "../lib/companies.js";
 
 export function clientIp(req, trustProxy) {
   if (trustProxy) {
@@ -25,8 +27,9 @@ export function clientSubnet(ip) {
   return ip;
 }
 
-export function createServer(store, { rateLimit = 20, readLimit = 300, trustProxy = false, corsOrigin = "*" } = {}) {
+export function createServer(store, { rateLimit = 20, readLimit = 300, trustProxy = false, corsOrigin = "*", sbKey = "", chKey = "" } = {}) {
   const hits = new Map(); // `${kind}|${key}` -> timestamps (1h window)
+  const serverCache = new Map(); // key -> { at, data }
 
   const limited = (kind, key, max) => {
     const t = Date.now(), k = kind + "|" + key, arr = (hits.get(k) || []).filter((x) => t - x < 3600000);
@@ -41,7 +44,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
   }, 600000);
   sweep.unref();
 
-  const srv = http.createServer((req, res) => {
+  const srv = http.createServer(async (req, res) => {
     const send = (code, obj, extra = {}) => {
       res.writeHead(code, {
         "content-type": "application/json",
@@ -121,6 +124,61 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
         return;
       }
 
+      if (req.method === "GET" && url.pathname === "/v1/check") {
+        if (limited("read", ip, readLimit)) return send(429, { error: "rate limited" });
+        const rawDomain = url.searchParams.get("domain");
+        const clean = Store.cleanDomain(rawDomain);
+        if (!clean) return send(400, { error: "invalid domain" });
+
+        const summary = store.summary(clean);
+        const ver = store.getMerchantVerification(clean);
+        const targetUrl = url.searchParams.get("url") || `https://${clean}/`;
+        const companyNumber = url.searchParams.get("companyNumber");
+
+        // Safe browsing lookup (server-cached)
+        let sbResult = null;
+        if (sbKey) {
+          const sbCacheKey = "sb:" + clean;
+          const cachedSb = serverCache.get(sbCacheKey);
+          if (cachedSb && Date.now() - cachedSb.at < 6 * 3600 * 1000) {
+            sbResult = cachedSb.data;
+          } else {
+            try {
+              sbResult = await safeBrowsing(targetUrl, sbKey);
+              serverCache.set(sbCacheKey, { at: Date.now(), data: sbResult });
+            } catch {
+              sbResult = null;
+            }
+          }
+        }
+
+        // Company profile lookup (server-cached)
+        let companyResult = null;
+        if (chKey && companyNumber) {
+          const coCacheKey = "co:" + companyNumber;
+          const cachedCo = serverCache.get(coCacheKey);
+          if (cachedCo && Date.now() - cachedCo.at < 24 * 3600 * 1000) {
+            companyResult = cachedCo.data;
+          } else {
+            try {
+              const profile = await fetchCompany(companyNumber, chKey);
+              companyResult = { profile };
+              serverCache.set(coCacheKey, { at: Date.now(), data: companyResult });
+            } catch {
+              companyResult = null;
+            }
+          }
+        }
+
+        return send(200, {
+          domain: clean,
+          summary,
+          verifiedMerchant: !!ver,
+          safeBrowsing: sbResult,
+          company: companyResult
+        }, { "cache-control": "public, max-age=60" });
+      }
+
       if (req.method === "GET" && url.pathname === "/v1/summary") {
         if (limited("read", ip, readLimit)) return send(429, { error: "rate limited" });
         return send(200, store.summary(url.searchParams.get("domain")), { "cache-control": "public, max-age=60" });
@@ -174,7 +232,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const srv = createServer(store, {
     rateLimit: Number(env.RATE_LIMIT || 20),
     trustProxy: env.TRUST_PROXY === "true",
-    corsOrigin: env.CORS_ORIGIN || "*"
+    corsOrigin: env.CORS_ORIGIN || "*",
+    sbKey: env.GOOGLE_SAFE_BROWSING_KEY || env.SAFE_BROWSING_KEY || "",
+    chKey: env.COMPANIES_HOUSE_KEY || ""
   });
   const timer = setInterval(() => store.flush(), 5000);
   const stop = () => {

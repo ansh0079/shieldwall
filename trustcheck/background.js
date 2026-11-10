@@ -5,7 +5,7 @@ import { historySignals, historyLines } from "./lib/history.js";
 import { priceContext, priceSignals } from "./lib/price.js";
 import { buildReport } from "./lib/score.js";
 import { extractCompanyNumber, fetchCompany, companySignals } from "./lib/companies.js";
-import { fetchSummary, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
+import { fetchSummary, fetchCheck, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
 
 const TTL = 6 * 3600 * 1000;
 const NET_CACHE_VERSION = 2; // v2 removes paid Trustpilot API data from cached scoring
@@ -49,19 +49,47 @@ async function analyze(url, tabId, force = false) {
     await chrome.storage.local.set({ [cacheKey]: net });
   }
 
-  // Buyer reports (own server): short in-memory cache so new reports show up quickly.
+  const scan = pageScans.get(tabId);
+  const number = scan ? extractCompanyNumber((scan.legal || []).join(" ")) : null;
+
+  // Cloud backend check: unified Safe Browsing, Companies House & Buyer reports
   let buyer = null;
+  let backendVerified = false;
+  let serverSb = null;
+  let serverCompanyProfile = null;
+
   if (backend) {
     const c = buyerCache.get(domain);
-    if (c && Date.now() - c.at < 5 * 60 * 1000) buyer = c.sum;
-    else { try { buyer = await fetchSummary(backend, domain); buyerCache.set(domain, { at: Date.now(), sum: buyer }); } catch { /* server down: skip */ } }
+    if (c && Date.now() - c.at < 5 * 60 * 1000) {
+      buyer = c.sum;
+      backendVerified = !!c.verified;
+      serverSb = c.sb || null;
+      serverCompanyProfile = c.profile || null;
+    } else {
+      try {
+        const checkData = await fetchCheck(backend, domain, { url, companyNumber: number || "" });
+        buyer = checkData.summary || null;
+        backendVerified = !!checkData.verifiedMerchant;
+        serverSb = checkData.safeBrowsing || null;
+        serverCompanyProfile = checkData.company?.profile || null;
+        buyerCache.set(domain, { at: Date.now(), sum: buyer, verified: backendVerified, sb: serverSb, profile: serverCompanyProfile });
+      } catch {
+        try {
+          buyer = await fetchSummary(backend, domain);
+          buyerCache.set(domain, { at: Date.now(), sum: buyer, verified: false, sb: null, profile: null });
+        } catch { /* server down: skip */ }
+      }
+    }
   }
 
-  const scan = pageScans.get(tabId);
+  // Incorporate server-proxied Safe Browsing if client key is omitted
+  if (!sbKey && serverSb) {
+    net.signals = [...net.signals.filter((s) => s.id !== "sb"), ...serverSb.signals];
+    if (serverSb.flagged) net.flagged = true;
+  }
 
   // Companies House: verify the company number shown in the shop's footer (cached 24h per number).
   let companySigs = [];
-  const number = scan ? extractCompanyNumber((scan.legal || []).join(" ")) : null;
   if (chKey && number) {
     const ck = "co:" + number;
     let rec = (await chrome.storage.local.get(ck))[ck];
@@ -70,16 +98,22 @@ async function analyze(url, tabId, force = false) {
       catch { rec = null; }
     }
     if (rec) companySigs = companySignals({ number, profile: rec.profile, haystack: `${scan.title} ${domain} ${(scan.legal || []).join(" ")}` });
-  } else if (chKey && scan?.isShop && !number) {
+  } else if (!chKey && serverCompanyProfile && number) {
+    companySigs = companySignals({ number, profile: serverCompanyProfile, haystack: `${scan?.title || ""} ${domain} ${(scan?.legal || []).join(" ")}` });
+  } else if ((chKey || backend) && scan?.isShop && !number) {
     companySigs = [{ id: "company", label: "No company registration number shown", status: "info", points: 0, detail: "UK traders normally show their company number in the site footer." }];
+  }
+
+  if (backendVerified) {
+    companySigs.push({ id: "merchant-verified", label: "Verified Merchant Identity", status: "good", points: 20, detail: "Domain ownership and business registration cryptographically verified." });
   }
 
   const pk = "price:" + domain;
   const pc = (await chrome.storage.session.get(pk))[pk];
   const priceSigs = pc && Date.now() - pc.at < 2 * 3600 * 1000 ? priceSignals(pc) : [];
   const signals = [...priceSigs, ...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...historySignals(net), ...buyerSignals(buyer), ...companySigs];
-  if (!chKey) signals.push({ id: "co-off", label: "UK company check not connected", status: "info", points: 0, detail: "Add a free Companies House API key in Options to verify a shop's registered company." });
-  if (!sbKey) signals.push({ id: "sb-off", label: "Malware/phishing database not connected", status: "info", points: 0, detail: "Add a free Google Safe Browsing key in Options for stronger protection." });
+  if (!chKey && !serverCompanyProfile && !backend) signals.push({ id: "co-off", label: "UK company check not connected", status: "info", points: 0, detail: "Add a free Companies House API key in Options to verify a shop's registered company." });
+  if (!sbKey && !serverSb && !backend) signals.push({ id: "sb-off", label: "Malware/phishing database not connected", status: "info", points: 0, detail: "Add a free Google Safe Browsing key in Options for stronger protection." });
   const report = buildReport({ url, domain, signals, reviews: null, merchantRating: scan?.merchantRating || null, links: reviewLinks(domain), flagged: net.flagged,
     feedback: buyerFeedback(buyer), buyerTotal: buyer && !buyer.hidden ? buyer.total : 0 });
   const purchase = (await chrome.storage.local.get("purchase:" + domain))["purchase:" + domain];

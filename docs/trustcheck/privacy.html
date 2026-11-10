@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TrustCheck Privacy Policy</title>
+  <style>
+    body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 24px; line-height: 1.6; color: #1f2328; }
+    h1 { font-size: 30px; margin-bottom: 8px; color: #0f172a; }
+    h2 { font-size: 19px; margin-top: 32px; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
+    p, li { font-size: 15px; color: #334155; }
+    ul { margin: 10px 0 16px 24px; }
+    li { margin-bottom: 6px; }
+    .lead { font-size: 17px; color: #0f172a; font-weight: 500; margin: 20px 0; }
+    .updated { color: #64748b; font-size: 14px; }
+    .callout { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 14px 18px; margin: 20px 0; border-radius: 4px; }
+    a { color: #0284c7; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>TrustCheck Privacy Policy</h1>
+  <p class="updated">Last updated: November 10, 2026</p>
+
+  <p class="lead">TrustCheck protects online shoppers from fraudulent stores, typosquatting, and payment skimming. We are committed to a strict privacy-first architecture: no accounts, no web-browsing tracking, and zero personal data monetization.</p>
+
+  <div class="callout">
+    <strong>Core Promise:</strong> TrustCheck does not collect, track, or sell your personal browsing history, passwords, credit card numbers, or personal identifying information.
+  </div>
+
+  <h2>1. Single Purpose & Data Minimization</h2>
+  <p>TrustCheck has a single purpose: <strong>evaluating merchant safety and risk factors on e-commerce websites you visit.</strong></p>
+  <p>To provide safety ratings without compromising your privacy, TrustCheck isolates only the <strong>registrable domain name</strong> (such as <code>example.com</code> or <code>store.myshopify.com</code>) using the Public Suffix List (PSL). Full page URLs containing search parameters, affiliate tags, personal tokens, or session IDs are <strong>never</strong> transmitted to our servers or third-party threat feeds.</p>
+
+  <h2>2. What Stays Locally on Your Device</h2>
+  <p>TrustCheck operates primarily inside your browser sandbox and stores operational data locally using standard extension storage (<code>chrome.storage.local</code> and <code>chrome.storage.session</code>):</p>
+  <ul>
+    <li><strong>User Settings:</strong> Your configured options, such as toolbar-only mode, display preferences, and custom backend endpoints.</li>
+    <li><strong>Local Verification Cache:</strong> Temporary caching of recently analyzed store domain ratings (up to 6 hours) to prevent redundant lookups.</li>
+    <li><strong>Ephemeral Session Data:</strong> Temporary search-page price medians to evaluate discounts on shopping listings within the active browser session.</li>
+    <li><strong>Client Installation Hash:</strong> A randomly generated pseudonymous UUID (cryptographically hashed using HMAC) used solely to deduplicate community feedback reports and prevent spam. It is never linked to your identity or hardware.</li>
+  </ul>
+  <p>You can clear this data at any time via the "Reset cache & settings" button in the extension Options page or by uninstalling the extension.</p>
+
+  <h2>3. Network Connections & Third-Party APIs</h2>
+  <p>When you browse an online store, TrustCheck performs lookup requests to establish domain age and security status:</p>
+  <ul>
+    <li><strong>Domain Registry (RDAP):</strong> Performs public WHOIS/RDAP queries (via <code>rdap.org</code> or official registries) to verify domain creation dates.</li>
+    <li><strong>Internet Archive (Wayback Machine):</strong> Queries the CDX snapshot index (<code>web.archive.org</code>) to establish when a store first appeared online, detecting bought or recycled domains.</li>
+    <li><strong>Google Safe Browsing:</strong> If connected, checks whether the site is flagged for known malware, phishing, or unwanted software. Only the origin is checked.</li>
+    <li><strong>Companies House (UK):</strong> If a merchant claims a UK registration number in its footer, TrustCheck verifies the public company status against the official UK registry API.</li>
+    <li><strong>TrustCheck Report Cloud:</strong> Retrieves aggregated community buyer feedback and verified merchant credentials for the current domain.</li>
+  </ul>
+
+  <h2>4. Developer Disclosures (Web Store Policy Compliance)</h2>
+  <p>In accordance with the Google Chrome Web Store User Data Policy and Mozilla Add-on Policies, we certify that:</p>
+  <ul>
+    <li>We <strong>do not sell</strong> user data to third parties under any circumstances.</li>
+    <li>We <strong>do not use or transfer</strong> user data for purposes unrelated to the extension's core shopping safety functionality.</li>
+    <li>We <strong>do not use or transfer</strong> user data to determine creditworthiness or for lending purposes.</li>
+    <li>We <strong>do not inject</strong> unsolicited advertisements, pop-ups, or search engine redirects into visited web pages.</li>
+  </ul>
+
+  <h2>5. Community Buyer Reports</h2>
+  <p>If you choose to submit feedback on a store (e.g. reporting a successful delivery, delayed order, or missing items):</p>
+  <ul>
+    <li>Only the target domain, selected outcome tag, and pseudonymous salted install hash are sent.</li>
+    <li>If an order confirmation was observed by TrustCheck, a proof flag (<code>purchase_observed</code>) is included, but sensitive order details (names, addresses, transaction IDs, payment methods) are completely omitted.</li>
+    <li>All community reports automatically expire and are purged after 90 days.</li>
+  </ul>
+
+  <h2>6. Open Source Transparency & Contact</h2>
+  <p>TrustCheck is open-source software under the Shieldwall project. The entire source code, build scripts, and test suites are publicly inspectable on GitHub.</p>
+  <p>If you have questions regarding this Privacy Policy or wish to request data deletion, contact us via our GitHub repository: <a href="https://github.com/ansh0079/shieldwall" target="_blank" rel="noreferrer">github.com/ansh0079/shieldwall</a>.</p>
+</body>
+</html>

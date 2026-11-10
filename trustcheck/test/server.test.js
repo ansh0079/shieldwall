@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Store } from "../server/store.js";
 import { createServer } from "../server/server.js";
-import { buyerSignals, buyerFeedback } from "../lib/buyers.js";
+import { buyerSignals, buyerFeedback, fetchCheck } from "../lib/buyers.js";
 
 const rep = (n, o, tags = []) => ({ installId: "install-" + String(n).padStart(6, "0"), domain: "shop.example", outcome: o, tags });
 
@@ -51,6 +51,13 @@ test("http round trip + rate limit", async () => {
   assert.equal((await post(4)).status, 429);
   const sum = await (await fetch(base + "/v1/summary?domain=shop.example")).json();
   assert.equal(sum.outcomes.never, 3);
+
+  // Test unified /v1/check endpoint
+  const checkData = await fetchCheck(base, "shop.example");
+  assert.equal(checkData.domain, "shop.example");
+  assert.equal(checkData.summary.outcomes.never, 3);
+  assert.equal(checkData.verifiedMerchant, false);
+
   srv.close();
 });
 test("buyer signals and feedback", () => {

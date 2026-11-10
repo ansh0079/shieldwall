@@ -22,6 +22,15 @@ export async function fetchSummary(base, domain) {
   return res.json();
 }
 
+export async function fetchCheck(base, domain, { url = "", companyNumber = "" } = {}) {
+  let endpoint = `${base.replace(/\/$/, "")}/v1/check?domain=${encodeURIComponent(domain)}`;
+  if (url) endpoint += `&url=${encodeURIComponent(url)}`;
+  if (companyNumber) endpoint += `&companyNumber=${encodeURIComponent(companyNumber)}`;
+  const res = await fetch(endpoint);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
 export async function submitReport(base, installId, domain, outcome, tags, purchaseId = null) {
   const res = await fetch(`${base.replace(/\/$/, "")}/v1/report`, {
     method: "POST", headers: { "content-type": "application/json" },
