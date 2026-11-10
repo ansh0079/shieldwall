@@ -38,6 +38,28 @@ const PhishScore = (function () {
     "cyou", "monster", "sbs", "cfd"
   ]);
 
+  // Words commonly glued to a brand in lookalike hostnames.
+  const BRAND_LURES = [
+    "login", "logon", "signin", "secure", "security", "account", "accounts",
+    "verify", "verification", "update", "support", "service", "auth",
+    "my", "web", "online", "official"
+  ];
+
+  // A brand token inside a label that is not that brand's own name.
+  // Matches hyphenated labels (login-paypal-secure) and lure+brand compounds
+  // (loginpaypal) without treating googleusercontent as "google".
+  function labelHasBrand(label, brand) {
+    if (!label || !brand) return false;
+    if (label === brand) return true;
+    if (label.split(/[^a-z0-9]+/).filter(Boolean).includes(brand)) return true;
+    if (brand.length < 5) return false;
+    const stripped = label.replace(/[^a-z0-9]/g, "");
+    return BRAND_LURES.some((lure) => {
+      const flat = lure.replace(/[^a-z0-9]/g, "");
+      return stripped === flat + brand || stripped === brand + flat;
+    });
+  }
+
   function levenshtein(a, b) {
     if (Math.abs(a.length - b.length) > 2) return 99;
     const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
@@ -85,21 +107,35 @@ const PhishScore = (function () {
       .filter(Boolean);
     const sld = base.split(".")[0];
 
-    for (const token of officialHost ? [] : BRAND_TOKENS) {
-      if (subLabels.some((l) => l.includes(token)) && !sld.includes(token)) {
-        riskScore += 3;
-        reasons.push(`Brand name "${token}" hidden in subdomain`);
-        break;
+    if (!officialHost) {
+      let brandReason = null;
+      for (const token of BRAND_TOKENS) {
+        if (sld === token) continue;
+        const inSub = subLabels.some((l) => labelHasBrand(l, token));
+        const inSld = labelHasBrand(sld, token);
+        if (inSub && !inSld) {
+          brandReason = `Brand name "${token}" hidden in subdomain`;
+          break;
+        }
+        if (inSld || inSub) {
+          brandReason = `Brand name "${token}" appears in a different site's address`;
+          break;
+        }
       }
-    }
-
-    for (const brand of officialHost ? [] : BRAND_NAMES) {
-      if (sld === brand) continue;
-      const dist = levenshtein(sld, brand);
-      if (dist > 0 && dist <= (brand.length >= 8 ? 2 : 1)) {
+      if (!brandReason) {
+        for (const brand of BRAND_NAMES) {
+          if (sld === brand) continue;
+          const stripped = sld.replace(/[^a-z0-9]/g, "");
+          const dist = levenshtein(stripped, brand);
+          if (dist > 0 && dist <= (brand.length >= 8 ? 2 : 1)) {
+            brandReason = `Looks like a misspelling of ${brand}.com`;
+            break;
+          }
+        }
+      }
+      if (brandReason) {
         riskScore += 3;
-        reasons.push(`Looks like a misspelling of ${brand}.com`);
-        break;
+        reasons.push(brandReason);
       }
     }
 
@@ -163,59 +199,48 @@ const PhishScore = (function () {
     return { riskScore, reasons, level, trustScore };
   }
 
-  // Combine phishing heuristics with site mode + tracker activity for a richer score.
+  // Blocker stats stay beside the site score. They do not change it.
+  function activityNote(mode, blocked, trackers) {
+    const modeText = mode === SITE_MODE.OFF
+      ? "Protection paused on this site"
+      : mode === SITE_MODE.ADS
+        ? "Ads allowed on this site"
+        : "Full protection on this site";
+    const requests = `${blocked} request${blocked === 1 ? "" : "s"} blocked`;
+    const from = trackers
+      ? ` from ${trackers} tracker${trackers === 1 ? "" : "s"}`
+      : "";
+    return `${modeText}. ${requests}${from}.`;
+  }
+
   function enrich(base, context) {
     context = context || {};
+    const blockedCount = context.blockedCount || 0;
+    const trackerCount = context.trackerCount || 0;
+    const siteMode = context.siteMode || SITE_MODE.FULL;
     if (!context.enabled) {
       return {
         riskScore: base?.riskScore || 0,
         reasons: ["Protection is off"],
         level: "off",
-        trustScore: null
+        trustScore: null,
+        blockedCount,
+        trackerCount,
+        siteMode,
+        activityNote: "Protection is off"
       };
     }
 
-    const result = {
+    return {
       riskScore: base?.riskScore || 0,
       reasons: [...(base?.reasons || [])],
       level: base?.level || "unknown",
-      trustScore: base?.trustScore
+      trustScore: base?.trustScore ?? null,
+      blockedCount,
+      trackerCount,
+      siteMode,
+      activityNote: activityNote(siteMode, blockedCount, trackerCount)
     };
-
-    if (result.trustScore == null) return result;
-
-    const mode = context.siteMode || SITE_MODE.FULL;
-    if (mode === SITE_MODE.OFF) {
-      result.trustScore = Math.max(5, result.trustScore - 25);
-      result.reasons.push("Protection paused on this site");
-      if (result.level === "excellent" || result.level === "good") {
-        result.level = "caution";
-      }
-    } else if (mode === SITE_MODE.ADS) {
-      result.trustScore = Math.max(5, result.trustScore - 8);
-      result.reasons.push("Ads allowed on this site (trackers still blocked)");
-    }
-
-    const blocked = context.blockedCount || 0;
-    const trackers = context.trackerCount || 0;
-    if (blocked >= 20 || trackers >= 8) {
-      result.trustScore = Math.max(5, result.trustScore - 12);
-      result.reasons.push(
-        `${blocked} request${blocked === 1 ? "" : "s"} blocked` +
-          (trackers ? ` from ${trackers} tracker${trackers === 1 ? "" : "s"}` : "")
-      );
-      if (result.level === "excellent") result.level = "good";
-    } else if (blocked >= 5 || trackers >= 3) {
-      result.trustScore = Math.max(5, result.trustScore - 6);
-      result.reasons.push(
-        `${blocked} request${blocked === 1 ? "" : "s"} blocked on this page`
-      );
-    } else if (blocked === 0 && mode === SITE_MODE.FULL && result.level !== "danger") {
-      result.reasons.push("No trackers blocked on this page yet");
-    }
-
-    result.trustScore = Math.max(5, Math.min(100, Math.round(result.trustScore)));
-    return result;
   }
 
   function getBaseDomainSafe(hostname) {

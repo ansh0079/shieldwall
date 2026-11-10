@@ -5,6 +5,9 @@ const faviconEl = document.getElementById("favicon");
 const trustRowEl = document.getElementById("trustRow");
 const trustScoreEl = document.getElementById("trustScore");
 const trustLabelEl = document.getElementById("trustLabel");
+const trustDetailEl = document.getElementById("trustDetail");
+const trustReasonsEl = document.getElementById("trustReasons");
+const trustActivityEl = document.getElementById("trustActivity");
 const shieldBtn = document.getElementById("shieldBtn");
 const pageCountEl = document.getElementById("pageCount");
 const totalCountEl = document.getElementById("totalCount");
@@ -140,6 +143,7 @@ function loadTrustScore(tabId) {
       trustRowEl.className = "trust-row trust-unknown";
       trustScoreEl.textContent = "—";
       trustLabelEl.textContent = i18n("trustUnavailable");
+      if (trustDetailEl) trustDetailEl.hidden = true;
       return;
     }
     if (!protectionEnabled) {
@@ -150,20 +154,22 @@ function loadTrustScore(tabId) {
   });
 }
 
-function showTrust({ level, reasons }) {
+function showTrust({ level, trustScore, reasons, activityNote }) {
   trustRowEl.hidden = false;
   trustRowEl.className = "trust-row trust-" + level;
-  document.getElementById("safetyReasons").textContent = reasons?.join(" · ") || "";
+  const reasonText = (reasons || []).join(" · ");
+  const safety = document.getElementById("safetyReasons");
+  if (safety) safety.textContent = reasonText;
+  if (trustDetailEl) trustDetailEl.hidden = false;
+  if (trustReasonsEl) trustReasonsEl.textContent = reasonText;
+  if (trustActivityEl) trustActivityEl.textContent = activityNote || "";
   if (level === "off") {
     trustScoreEl.textContent = i18n("trustScoreOff");
     trustLabelEl.textContent = i18n(TRUST_KEYS.off);
     return;
   }
-  trustScoreEl.textContent = "";
-  trustLabelEl.textContent = ({
-    excellent: "No phishing signals detected", good: "No phishing signals detected",
-    caution: "Caution advised", danger: "Phishing signals detected"
-  })[level] || i18n("trustUnavailable");
+  trustScoreEl.textContent = trustScore == null ? "—" : trustScore + "/100";
+  trustLabelEl.textContent = i18n(TRUST_KEYS[level] || "trustUnknown");
 }
 
 function updateShieldButton(enabled) {
