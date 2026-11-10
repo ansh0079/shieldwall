@@ -25,7 +25,7 @@ Manifest V3, **zero data collection**. Everything runs locally on your device.
 - Additional default static rulesets (enabled): uBO Filters, uBO Privacy, uBO Quick Fixes, AdGuard Base, AdGuard Tracking, Peter Lowe’s (auto-trimmed to stay within Chrome’s static DNR budget; overflow lists remain optional toggles)
 - Optional Fanboy / Cookie / regional lists
 - Cosmetics, `:has()` empty-ad collapse, element zapper, YouTube + scriptlet catalog
-- Per-site modes: full / allow ads / pause · Fix this site · cookie reject-then-hide
+- Per-site modes: full / allow ads / pause · Fix page display keeps network blocking active · cookie reject-then-hide
 - CNAME uncloaking map for known first-party tracker aliases
 
 **Tracker intelligence**

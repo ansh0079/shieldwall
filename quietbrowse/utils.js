@@ -93,6 +93,27 @@ function siteKey(hostname) {
   return hostname.replace(/^www\./, "");
 }
 
+function getSiteContentException(hostname, exceptions, now = Date.now()) {
+  const host = siteKey(hostname);
+  let match = null;
+  let matchLength = -1;
+  for (const [domain, value] of Object.entries(exceptions || {})) {
+    if (host !== domain && !host.endsWith("." + domain)) continue;
+    const entry = value === true ? { stage: "page", permanent: true } : value;
+    if (!entry || typeof entry !== "object") continue;
+    if (!entry.permanent && entry.expiresAt && entry.expiresAt <= now) continue;
+    if (domain.length > matchLength) {
+      match = entry;
+      matchLength = domain.length;
+    }
+  }
+  return match;
+}
+
+function hasSiteContentException(hostname, exceptions) {
+  return !!getSiteContentException(hostname, exceptions);
+}
+
 function localDateStr(date) {
   return (
     date.getFullYear() +
