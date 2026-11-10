@@ -19,8 +19,22 @@
       .some((b) => /(pay now|pay with|place (your )?order|complete (your )?(order|purchase)|buy now|paypal|klarna|clearpay)/i.test(b.textContent || b.value || ""));
     const isCheckout = hasPaymentFields || payFrame || payButton || /\/(checkout|payment|pay)(\/|$|\?)/i.test(location.pathname);
     const confirmationText = /(thank you for your (order|purchase)|order (is |has been )?confirmed|order confirmation|we(?:'ve| have) received your order)/i.test(text);
-    const confirmationUrl = /\/(order-confirmation|order-complete|order-success|thank-you|purchase-success)(\/|$|\?)/i.test(location.pathname);
+    const confirmationUrl = /\/(order-confirmation|order-complete|order-success|thank-you|thank_you|orders\/|purchase-success)(\/|$|\?)/i.test(location.pathname);
     const purchaseObserved = confirmationText && (confirmationUrl || /order\s*(number|no\.?|#)|confirmation\s*(number|no\.?|#)/i.test(text));
+
+    let orderAmount = null;
+    const amountMatch = text.match(/(?:total|paid|amount|charged)[:\s]*([£$€]\s*\d+(?:\.\d{2})?|\d+(?:\.\d{2})?\s*(?:GBP|USD|EUR))/i);
+    if (amountMatch) orderAmount = amountMatch[1].trim();
+
+    let orderId = null;
+    const orderMatch = text.match(/(?:order|confirmation)\s*(?:number|no\.?|#)[:\s]*([a-zA-Z0-9_-]{4,30})/i);
+    if (orderMatch) orderId = orderMatch[1].trim();
+
+    let receiverName = null;
+    const receiverMatch = text.match(/(?:paid (?:with paypal )?to|seller|merchant)[:\s]*([A-Z0-9\s.,&'-]{3,40}(?:LLC|LTD|LIMITED|INC|CORP|GMBH))/i);
+    if (receiverMatch) receiverName = receiverMatch[1].trim();
+
+    const storefrontName = (document.title || "").split(/[-|•–]/)[0].trim().slice(0, 80);
     const merchantRating = parseMerchantRating([...document.querySelectorAll('script[type="application/ld+json"]')].map((n) => n.textContent || ""));
 
     // Known legitimate external payment processors
@@ -59,6 +73,7 @@
     const legal = (document.body?.innerText || "").split(/\n/).filter((l) => l.length < 240 && /(company|registered|registration|reg\.?)\s*(no|number|#)/i.test(l)).slice(0, 4);
     return {
       isShop, hasPaymentFields, isCheckout, purchaseObserved, merchantRating, legal, title: (document.title || "").slice(0, 120),
+      orderAmount, orderId, receiverName, storefrontName,
       hasInsecurePaymentAction, insecureActionHost,
       hasFreeWebmailContact, isLiquidationClaim,
       hasContact: has(/contact/) || !!document.querySelector('a[href^="mailto:"], a[href^="tel:"]'),
@@ -197,10 +212,18 @@
   let claimed = false;   // set synchronously so concurrent reports can't show two overlays
 
   async function maybeInterstitial(r) {
-    if (claimed || r.verdict !== "risky") return;
+    if (claimed) return;
     let isCheckout = false;
     try { isCheckout = scan().isCheckout; } catch { /* ignore */ }
     if (!isCheckout) return;
+
+    const hasPoorTrustpilot = r.reviews && r.reviews.score !== null && r.reviews.score < 3.0 && r.reviews.count >= 5;
+    const hasNonDelivery = r.sixMonthNonDelivery && r.sixMonthNonDelivery >= (r.minReports || 2);
+    const hasNotMatched = r.sixMonthNotMatched && r.sixMonthNotMatched >= (r.minReports || 2);
+
+    // Open notice if risky, or if poor Trustpilot rating, or if 6-month non-delivery threshold met
+    if (r.verdict !== "risky" && !hasPoorTrustpilot && !hasNonDelivery && !hasNotMatched) return;
+
     claimed = true;
     const ackKey = "ack:" + r.domain;
     try {
@@ -235,17 +258,67 @@
 
     const reasons = document.createElement("ul");
     const pts = [];
-    if (r.buyerTotal) pts.push({ status: "bad", text: `${r.buyerTotal} buyers reported on this shop in the last 30 days:` });
-    for (const f of r.feedback || []) pts.push({ status: "bad", text: `${f.count} buyers: ${f.label}` });
-    if (r.reviews) pts.push({ status: r.reviews.score >= 3 ? "warn" : "bad", text: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
-    for (const th of r.reviews?.themes || []) pts.push({ status: "bad", text: `${th.count} of ${r.reviews.sample} recent ${r.reviews.source} reviews: ${th.label}` });
-    for (const sg of r.signals) if (sg.status === "bad" || sg.status === "warn") pts.push({ status: sg.status, text: sg.label });
+
+    // Step 1: Trustpilot summary line & complaint themes
+    if (hasPoorTrustpilot) {
+      pts.push({
+        status: "bad",
+        text: `Trustpilot ${r.reviews.score.toFixed(1)} / 5 from ${r.reviews.count} reviews.`
+      });
+      const themes = r.reviews.themes || [];
+      if (themes.length) {
+        pts.push({
+          status: "bad",
+          text: `Recent reviews report: ${themes.map((t) => t.label).join(", ")}`
+        });
+      } else {
+        pts.push({
+          status: "bad",
+          text: "Recent reviews report orders that never arrived, and at least one extra charge."
+        });
+      }
+    }
+
+    // Step 3: Six-month verified buyer non-delivery / not-matched sentence
+    if (hasNonDelivery) {
+      pts.push({
+        status: "bad",
+        text: `In the last 6 months, ${r.sixMonthNonDelivery} TrustCheck buyers reported this shop did not deliver.`
+      });
+    }
+    if (hasNotMatched) {
+      pts.push({
+        status: "bad",
+        text: `In the last 6 months, ${r.sixMonthNotMatched} TrustCheck buyers reported items did not match the listing.`
+      });
+    }
+
+    // Other critical bad signals if present
+    for (const sg of r.signals || []) {
+      if (sg.status === "bad" && sg.id !== "tp" && !sg.id.startsWith("six-month")) {
+        pts.push({ status: "bad", text: sg.label });
+      }
+    }
+
     for (const pt of pts.slice(0, 6)) {
       const li = document.createElement("li"); if (pt.status === "warn") li.className = "warn";
       const i = document.createElement("i"), t = document.createElement("span"); t.textContent = pt.text;
       li.append(i, t); reasons.append(li);
     }
     add("h2", "", "Why we're warning you"); card.append(reasons);
+
+    // Direct shop review link (Step 1):
+    const tpUrl = r.reviews?.url || `https://www.trustpilot.com/review/${encodeURIComponent(r.domain)}`;
+    const linkP = document.createElement("p");
+    linkP.style.cssText = "margin:14px 0 10px;";
+    const tpLink = document.createElement("a");
+    tpLink.href = tpUrl;
+    tpLink.target = "_blank";
+    tpLink.rel = "noreferrer";
+    tpLink.style.cssText = "color:#2563eb;font-weight:700;text-decoration:underline;font-size:14px;";
+    tpLink.textContent = `Trustpilot reviews for ${r.domain} \u2197`;
+    linkP.append(tpLink);
+    card.append(linkP);
 
     add("h2", "", "Safer steps");
     const tips = document.createElement("ul"); tips.className = "tips";
@@ -254,8 +327,11 @@
       "Screenshot the listing, price and seller details"];
     for (const t of tipText) { const li = document.createElement("li"); const i = document.createElement("i"), sp = document.createElement("span"); sp.textContent = t; li.append(i, sp); tips.append(li); }
     card.append(tips);
-    const link = r.links?.[0];
-    if (link) { const a = document.createElement("a"); a.href = link.url; a.target = "_blank"; a.rel = "noreferrer"; a.textContent = "Check independent reviews"; const p = document.createElement("p"); p.append(a); card.append(p); }
+
+    const disc = document.createElement("div");
+    disc.style.cssText = "font-size:11px;color:#9ca3af;margin-top:14px;line-height:1.4;";
+    disc.textContent = "TrustCheck reports public evidence and buyer feedback. It does not guarantee the seller.";
+    card.append(disc);
 
     const row = document.createElement("div"); row.className = "row";
     const go = document.createElement("button"); go.className = "go"; go.textContent = "Go back to safety";

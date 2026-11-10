@@ -19,6 +19,7 @@ export class Store {
     this.reports = new Map(); // `${domain}|${installHash}` -> report
     this.domainBursts = new Map(); // domain -> timestamps
     this.merchantVerifications = new Map(); // domain -> {token, method, verifiedAt}
+    this.orderLogs = []; // in-memory order logs
     this.dirty = false;
 
     // Check if SQLite file requested
@@ -46,6 +47,19 @@ export class Store {
             method TEXT NOT NULL,
             verified_at INTEGER NOT NULL
           );
+          CREATE TABLE IF NOT EXISTS order_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT NOT NULL,
+            storefront_name TEXT,
+            receiver_name TEXT,
+            trustpilot_score REAL,
+            trustpilot_count INTEGER,
+            trustpilot_url TEXT,
+            outcome TEXT NOT NULL,
+            order_date TEXT,
+            answer_date TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_order_logs_domain ON order_logs (domain);
         `);
       } catch {
         this.useSqlite = false;
@@ -110,6 +124,66 @@ export class Store {
       return row ? { domain: row.domain, token: row.token, method: row.method, verifiedAt: row.verified_at } : null;
     }
     return this.merchantVerifications.get(domain) || null;
+  }
+
+  // Step 4: Record verified outcome in order log for payment processors
+  addOrderLog({
+    domain,
+    storefrontName = "",
+    receiverName = "",
+    trustpilotScore = null,
+    trustpilotCount = null,
+    trustpilotUrl = "",
+    outcome,
+    orderDate = "",
+    answerDate = null
+  }) {
+    domain = Store.cleanDomain(domain);
+    if (!domain) throw new Error("invalid domain");
+    const ans = answerDate || new Date(this.now()).toISOString();
+    const row = {
+      domain,
+      storefrontName: storefrontName || null,
+      receiverName: receiverName || null,
+      trustpilotScore: trustpilotScore !== null ? Number(trustpilotScore) : null,
+      trustpilotCount: trustpilotCount !== null ? Number(trustpilotCount) : null,
+      trustpilotUrl: trustpilotUrl || `https://www.trustpilot.com/review/${domain}`,
+      outcome,
+      orderDate: orderDate || null,
+      answerDate: ans
+    };
+    if (this.useSqlite && this.db) {
+      const stmt = this.db.prepare(`
+        INSERT INTO order_logs (domain, storefront_name, receiver_name, trustpilot_score, trustpilot_count, trustpilot_url, outcome, order_date, answer_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      stmt.run(
+        row.domain,
+        row.storefrontName,
+        row.receiverName,
+        row.trustpilotScore,
+        row.trustpilotCount,
+        row.trustpilotUrl,
+        row.outcome,
+        row.orderDate,
+        row.answerDate
+      );
+    } else {
+      this.orderLogs.push(row);
+      this.dirty = true;
+    }
+    return row;
+  }
+
+  getOrderLogs(domain = null) {
+    if (this.useSqlite && this.db) {
+      if (domain) {
+        return this.db.prepare("SELECT domain, storefront_name AS storefrontName, receiver_name AS receiverName, trustpilot_score AS trustpilotScore, trustpilot_count AS trustpilotCount, trustpilot_url AS trustpilotUrl, outcome, order_date AS orderDate, answer_date AS answerDate FROM order_logs WHERE domain = ? ORDER BY id DESC").all(domain);
+      }
+      return this.db.prepare("SELECT domain, storefront_name AS storefrontName, receiver_name AS receiverName, trustpilot_score AS trustpilotScore, trustpilot_count AS trustpilotCount, trustpilot_url AS trustpilotUrl, outcome, order_date AS orderDate, answer_date AS answerDate FROM order_logs ORDER BY id DESC").all();
+    }
+    if (domain) return this.orderLogs.filter((x) => x.domain === domain);
+    return [...this.orderLogs];
   }
 
   add({ installId, domain, outcome, tags = [], purchaseId = null }) {
@@ -199,13 +273,43 @@ export class Store {
 
     const isVerifiedMerchant = !!this.getMerchantVerification(domain);
 
+    // 6-month window (180 days) for verified purchase-observed delivery reports (Step 3)
+    const sixMonthsAgo = this.now() - 180 * DAY;
+    let sixMonthRows = [];
+    if (this.useSqlite && this.db) {
+      const q6 = this.db.prepare("SELECT * FROM reports WHERE domain = ? AND at >= ? AND proof = 'purchase_observed'");
+      sixMonthRows = q6.all(domain, sixMonthsAgo).map((r) => ({
+        outcome: r.outcome,
+        tags: JSON.parse(r.tags || "[]")
+      }));
+    } else {
+      sixMonthRows = [...this.reports.values()].filter((r) => r.domain === domain && r.at >= sixMonthsAgo && r.proof === "purchase_observed");
+    }
+
+    let sixMonthNonDelivery = 0;
+    let sixMonthNotMatched = 0;
+    let sixMonthDelivered = 0;
+    for (const r of sixMonthRows) {
+      if (r.outcome === "never") sixMonthNonDelivery++;
+      else if (r.outcome === "ok") sixMonthDelivered++;
+      else if (r.outcome === "problem" && (r.tags.includes("not_as_described") || r.tags.includes("wrong_item") || r.tags.includes("counterfeit"))) {
+        sixMonthNotMatched++;
+      }
+    }
+    const activeNonDelivery = sixMonthNonDelivery >= this.minReports ? sixMonthNonDelivery : 0;
+    const activeNotMatched = sixMonthNotMatched >= this.minReports ? sixMonthNotMatched : 0;
+
     if (rows.length < this.minReports) {
       return {
         domain,
         total: rows.length,
         hidden: rows.length > 0,
         windowDays: this.windowDays,
-        verifiedMerchant: isVerifiedMerchant
+        verifiedMerchant: isVerifiedMerchant,
+        sixMonthNonDelivery: activeNonDelivery,
+        sixMonthNotMatched: activeNotMatched,
+        sixMonthDelivered,
+        minReports: this.minReports
       };
     }
 
@@ -234,6 +338,10 @@ export class Store {
       outcomes,
       tags,
       verifiedMerchant: isVerifiedMerchant,
+      sixMonthNonDelivery: activeNonDelivery,
+      sixMonthNotMatched: activeNotMatched,
+      sixMonthDelivered,
+      minReports: this.minReports,
       smoothed: {
         neverRate: Number(smoothedNeverRate.toFixed(3)),
         problemRate: Number(smoothedProblemRate.toFixed(3)),

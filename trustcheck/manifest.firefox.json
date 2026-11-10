@@ -5,7 +5,9 @@
   "description": "Real-time risk assessment, seller reviews and scam warnings for online stores.",
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
     "https://rdap.org/*",

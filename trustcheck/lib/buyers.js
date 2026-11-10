@@ -31,10 +31,20 @@ export async function fetchCheck(base, domain, { url = "", companyNumber = "" } 
   return res.json();
 }
 
-export async function submitReport(base, installId, domain, outcome, tags, purchaseId = null) {
+export async function submitReport(base, installId, domain, outcome, tags, purchaseId = null, extra = {}) {
   const res = await fetch(`${base.replace(/\/$/, "")}/v1/report`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ installId, domain, outcome, tags, purchaseId })
+    body: JSON.stringify({
+      installId,
+      domain,
+      outcome,
+      tags,
+      purchaseId,
+      storefrontName: extra.storefrontName || null,
+      receiverName: extra.receiverName || null,
+      orderDate: extra.orderDate || null,
+      answerDate: extra.answerDate || null
+    })
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "HTTP " + res.status);
   return res.json();

@@ -1,173 +1,128 @@
-# TrustCheck — Buyer Warning & Intervention Implementation Plan
+# Buyer warning plan
 
-**Document:** `BUYER_WARNING_PLAN.md`  
-**Target:** TrustCheck v0.2.x+ Browser Security & Commercial Release  
-**Status:** Architecture & Operational Specification  
+The product is a warning the buyer sees before they pay a bad shop, then a short question two weeks later that records whether the order arrived. Payment companies get a feed only after that record holds many orders.
 
----
+Worked example: `koadclo.com`, ASICS Gel-Kayano 31, £59.99, paid with PayPal to IDJ GROUP LLC. Trustpilot for that shop was 2.0 / 5 from 78 reviews, with months of reports that orders never arrived and that buyers were charged again. The buyer has said they would not have paid if they had seen that page first.
 
-## 1. Executive Summary
+This plan does not change QuietBrowse.
 
-TrustCheck's core commercial differentiator over passive review sites (Trustpilot, ScamAdviser) and traditional ad blockers is **active intervention at the exact moment of financial risk**. 
+## Where we are
 
-Passive reputation lookups fail because consumers rarely remember to research a store before entering credit card details. By intervening contextually—at search discovery, during browsing, and immediately upon reaching a checkout form—TrustCheck stops fraudulent transactions before payment credentials leave the browser.
+TrustCheck 0.2.0 already does most of the surrounding work.
 
-However, displaying aggressive warnings about commercial businesses carries legal and technical risks:
-1. **Defamation & Merchant Liability:** Publishing false "scam" accusations exposes the platform to lawsuits and takedown demands.
-2. **User Fatigue:** Showing intrusive overlays on every unfamiliar store causes users to disable the extension.
-3. **Cart Abandonment Impact:** A false warning harms legitimate independent merchants.
+| Already built | What it does today | Why this order still goes through |
+|---|---|---|
+| Trustpilot lookup | Score, review count, and complaint themes (non-delivery, refund, scam) when an API key is set | The key is the buyer's. With no key, the check does not run |
+| Trustpilot link | `https://www.trustpilot.com/review/{domain}` is the first research link | The checkout notice never opens for this case, so the buyer never sees the link |
+| Checkout notice | Full-page dialog on a payment page, with reasons and "Go back to safety" | It opens only for **High risk** or **Dangerous** |
+| Poor Trustpilot score | Score under 3 with at least 5 reviews is one strong warning | One strong warning is **Caution**. Caution does not open the notice |
+| Buyer reports | Server stores outcomes and resists coordinated spam | Reports are unverified, cover 30 days, have no score effect, and the buyer has to go looking for the form |
+| Order follow-up | Not built | No `alarms` or `notifications` permission. Nothing is stored when an order is confirmed |
 
-This plan defines the **calibrated warning tiers**, **trigger criteria**, **checkout interstitial architecture**, **legal liability shield**, and **dispute handling workflow** required for a commercial-grade consumer product.
+A 2.0 Trustpilot score on its own leaves the verdict at Caution. The PayPal button still works, and the buyer is not shown the review page.
 
----
+The PayPal legal name (IDJ GROUP LLC) is on the receipt and sometimes on the PayPal sheet. It is usually absent from the shop page, so the first warning does not depend on it.
 
-## 2. Calibrated Warning Tiers
+## What this plan does not include
 
-TrustCheck uses a **four-tier progressive warning hierarchy**. Warnings escalate only as evidence of active harm increases.
+- A consumer subscription, a Pro tier, or a price.
+- A badge a merchant can buy or display.
+- The twelve-week commercialization plan (Stripe, merchant dashboards, SEO pages, Companies House as the product).
+- Changing QuietBrowse, or mixing its ad-block stats into this warning.
 
-```
-+-------------------------------------------------------------------------+
-| Level 4: Checkout Interstitial Modal (Blocker / High-Risk Confirmation)  |
-|          Active payment entry on confirmed critical risk stores         |
-+-------------------------------------------------------------------------+
-                                    ^
-+-------------------------------------------------------------------------+
-| Level 3: Dropdown Top-Right Banner (In-Page Notification)               |
-|          Automatic expansion on Risky / Caution stores                  |
-+-------------------------------------------------------------------------+
-                                    ^
-+-------------------------------------------------------------------------+
-| Level 2: Search Result Hover Cards & Price Badges                       |
-|          Pre-click evaluation on Google / Bing search result listings   |
-+-------------------------------------------------------------------------+
-                                    ^
-+-------------------------------------------------------------------------+
-| Level 1: Passive Toolbar Badge & Popup Details                          |
-|          Continuous score indicator (75 green, 69 amber, 20 red, ? grey)|
-+-------------------------------------------------------------------------+
-```
+## Step 1. Show the Trustpilot warning before payment
 
-### Warning Tier Specification Matrix
+On a checkout page, a poor Trustpilot rating opens the existing full-page notice. The notice states the score and the recent complaint, and it links straight to that shop's Trustpilot page.
 
-| Tier | UI Component | Trigger Condition | User Impact | Dismissal / Cooldown |
-|---|---|---|---|---|
-| **Tier 1: Passive Badge** | Chrome extension toolbar icon | Every navigable page (`score: 0–100` or `?`) | Non-intrusive color/number pill in toolbar | Always visible |
-| **Tier 2: Search Preview** | Floating card on search result hover | Search result hover on Google / Bing Shopping | Pre-click decision cue; shows price deviation vs. median | Disappears on mouse leave |
-| **Tier 3: In-Page Banner** | Floating pill at top right (`content.js`) | Page load on `risky`, `caution`, or `unverified` stores | Slides down; auto-collapses to pill after 4s (stays open if `risky`) | Click `×` hides for active page session |
-| **Tier 4: Checkout Interstitial** | Full-screen focus-trapped alert dialog | Navigating to payment/checkout page on a **Tier-4 Critical Risk** store | Blocks interaction until buyer explicitly acknowledges or exits | 24-hour domain acknowledgment (`ack:<domain>`) |
+For the example order the notice says:
 
----
+- Trustpilot 2.0 / 5 from 78 reviews.
+- Recent reviews report orders that never arrived, and at least one extra charge.
+- One link, labelled with the shop: [Trustpilot reviews for koadclo.com](https://www.trustpilot.com/review/koadclo.com).
 
-## 3. Tier 4: Checkout Interstitial Architecture
+Rules:
 
-The checkout interstitial is TrustCheck's strongest protection mechanism. It intercepts the user when payment fields are detected.
+- Open the notice when Trustpilot is under 3.0 and has at least 5 reviews, even if the verdict is only Caution. Do not open it for every Caution (a price anomaly or a young domain alone stays as it is).
+- The link is the shop's own review page, not a generic "check reviews" search. Show the link even when the score could not be loaded.
+- Keep the existing choice: go back, or continue and suppress the same shop for 24 hours.
+- Keep the existing disclaimer. The notice reports evidence. It does not guarantee the seller.
 
-### 3.1 Detection of Checkout Intent (`content.js:scan()`)
-An interstitial is only evaluated if `scan().isCheckout` returns `true`:
-- Credit card input fields detected: `input[autocomplete^="cc-"]`, `input[name*="card"]`, `input[name*="cvv"]`, `input[name*="cvc"]`
-- External hosted payment iframes detected: `iframe[src*="stripe.com"]`, `iframe[src*="paypal.com"]`, `iframe[src*="klarna.com"]`
-- Explicit payment submission buttons: `/(pay now|pay with|place order|complete purchase|buy now)/i`
-- Checkout URL paths: `/(checkout|payment|pay)(\/|$|\?)/i`
+The score and the six-month complaint line need Trustpilot's API. Buyers should not paste an API key. Put one Trustpilot key on the existing report server and have the extension ask that server for the public summary (score, count, theme counts, review URL). The key never ships inside the extension. If the server is down, the notice still shows the link.
 
-### 3.2 Critical Triggers for Checkout Blocking
-The checkout interstitial is **never** shown merely because a store is new or has zero reviews. To trigger Level 4, at least **one definitive threat flag** or a **composite critical score** ($\le 20$) must be present:
+Done when a replay of the Koadclo checkout, with that Trustpilot summary, opens the notice before the PayPal button is used, and the link opens `https://www.trustpilot.com/review/koadclo.com`.
 
-1. **`pay-hijack` (Payment Form Hijack):** `<form>` submits credit card fields to an untrusted external origin that is not a certified payment gateway (Stripe, PayPal, Adyen, Worldpay, Shopify, Klarna).
-2. **`sb` (Safe Browsing Hit):** Domain or URL is flagged on Google Safe Browsing / PhishTank blocklists.
-3. **`pay-http` (Unencrypted Payment):** Credit card form on an unencrypted `http://` page.
-4. **`lookalike` (Brand Typosquatting):** Deceptive character substitutions (`amaz0n.com`, `nikestore-outlet.com`) targeting verified retailers.
-5. **Severe Buyer Non-Delivery (`never / total >= 0.4` with $\ge 5$ reports):** Over 40% of verified buyers report that goods never arrived.
-6. **Price Outlier Trap ($\ge 65\%$ below median) + New Domain ($< 60$ days old):** High-confidence counterfeit or fake-liquidation signature.
+## Step 2. Ask once, fourteen days after the order confirmation
 
-### 3.3 Interstitial Accessibility & UX Specification
-- **Container Isolation:** Injected into `document.documentElement` via Closed Shadow DOM (`attachShadow({ mode: "closed" })`) to prevent host page CSS pollution or malicious script tampering.
-- **ARIA Compliance:** `role="alertdialog"`, `aria-modal="true"`, `aria-label="TrustCheck Security Warning"`.
-- **Focus Management:** Focus trapped inside the dialog; `Escape` key listener closes the modal and redirects back.
-- **Primary CTA ("Leave Site"):** Green button (`background: #16a34a`), autofocus: `"Take me back (Recommended)"` triggers `history.back()`.
-- **Secondary CTA ("Proceed"):** Subdued text link: `"I understand the risk, continue to checkout"`.
-- **Cooldown:** When bypassed, stores `ack:<domain> = Date.now()` in `chrome.storage.local` with a 24-hour expiration so the user is not spammed if they choose to proceed.
+When the extension sees an order-confirmation page (a Shopify thank-you page, `/thank_you`, `/orders/`, or the return page from PayPal, Klarna, or a card checkout), it stores a reminder on that computer.
 
----
+Stored locally:
 
-## 4. Legal Defensibility & Defamation Shield
+- shop domain
+- date
+- amount, if it is visible
+- a hash of the order id, if one is visible
 
-Calling a business a "scam" or "fraud" without a criminal conviction is libelous under English defamation law (Defamation Act 2013) and actionable under US commercial disparagement laws. TrustCheck protects itself through strict structural rules:
+Not stored and not sent: name, email, address, card, or PayPal account.
 
-### 4.1 Opinion & Factual Signal Calibration
-| Dangerous Terminology (Never Used) | Calibrated Replacement (Legally Defensible) |
+Fourteen days later a browser notification asks two questions:
+
+1. Did your order from this shop arrive? Yes / No / Not yet.
+2. If it arrived: did it match the listing? Yes / No.
+
+"Not yet" asks once more seven days later, then stops. Any other answer is sent once, as the outcome only, through the existing report server. The buyer can turn reminders off in Options.
+
+This needs the `alarms` and `notifications` permissions. Nothing else messages the buyer. There is no email and no account.
+
+Done when a confirmation page creates one local reminder, the notification fires at day 14, and a "no" answer is stored as "did not arrive" for that domain with no personal data in the payload.
+
+## Step 3. Use those answers on the next buyer's warning
+
+Once enough buyers have answered, the same checkout notice adds a second sentence:
+
+> In the last 6 months, N TrustCheck buyers reported this shop did not deliver.
+
+Rules:
+
+- The window is 6 months, not the current 30 days.
+- The sentence appears only after the server's existing display threshold is met, so a handful of replies cannot brand a shop.
+- Until that threshold is met, the notice cites Trustpilot only.
+- A reply counts only when this extension saw that buyer's order-confirmation page and the buyer answered the reminder. It is stronger than a form filled in from a cold visit, and it is still the buyer's own word. Keep the server's per-network caps.
+- "Did not match the listing" is a separate count, shown only when it also clears the threshold.
+- Crossing the threshold opens the checkout notice on its own, the same way a poor Trustpilot score does in step 1.
+
+Done when a shop with enough "did not arrive" answers shows the six-month sentence and the Trustpilot link on the next checkout, and a shop under the threshold does not.
+
+## Step 4. Offer the log to a payment company after it holds many orders
+
+Do not approach PayPal, Klarna, or a smaller payment processor with one missed pair of shoes. Approach them when the log has many completed orders across many shops, each row collected the same way.
+
+Each row:
+
+| Field | Example |
 |---|---|
-| "This site is a scam" | "Multiple high-risk indicators detected" |
-| "Fake shop" | "Brand lookalike — does not match official domain" |
-| "Fraudulent seller" | "Order non-delivery reported by 6 of 10 buyers" |
-| "Untrustworthy" | "Unverified store — limited public trading history" |
-| "Malicious site" | "Listed on Google Safe Browsing malware directory" |
+| Shop domain | `koadclo.com` |
+| Storefront name | KOAD'CLO, when the page shows it |
+| Receiver name | IDJ GROUP LLC, only when the PayPal or Klarna sheet actually shows it |
+| Trustpilot page and score that day | 2.0 / 5, 78 reviews, URL |
+| Outcome | arrived, did not arrive, or did not match the listing |
+| Date of the order and date of the answer | |
 
-### 4.2 Objective Factual Sourcing
-Every negative point displayed on a warning must map to an independently verifiable public record:
-- **Registry:** Public RDAP registration date (e.g., `Registered 12 days ago`).
-- **Archive:** Public Internet Archive snapshot date (e.g., `Site first appeared online Nov 2026`).
-- **Government:** UK Companies House / EU VIES VAT registry lookup result.
-- **Technical Inspection:** Insecure HTTP action, cross-origin form target, or missing SSL certificate.
-- **Attributed Community Data:** Explicitly phrased as attribution: `"X buyers reported an unfulfilled order"` rather than `"This merchant steals money"`.
+The receiver name is a later addition inside this step. The shop page usually does not contain it. Read it only from the payment sheet the buyer is already looking at, and store the name, not the buyer's account.
 
-### 4.3 Mandatory Disclaimer
-All UI footers and warning cards must display:
-> *"TrustCheck ratings are automated, informational risk evaluations based on public web signals and buyer feedback. Ratings do not constitute legal advice or factual determinations of merchant intent. See Terms."*
+The pitch is the table, not a prediction: shops with a poor Trustpilot page and a high share of "did not arrive" answers. The payment company already has the merchant. This log says what happened after the payment.
 
----
+Done when the export is aggregate rows with no buyer identity, and it is not offered until the order count is large enough to be useful to a processor.
 
-## 5. Merchant Dispute & Appeals Workflow
+## Order of work
 
-A commercial trust platform must provide a clear, rapid path for legitimate merchants to dispute erroneous ratings.
+1. Step 1, including the server-side Trustpilot summary, so the Koadclo case is warned before payment.
+2. Step 2, so answers start accumulating from real orders.
+3. Step 3, once the display threshold can be met with real replies.
+4. Step 4, once the log covers many shops. The receiver-name field is part of this step, not of the first warning.
 
-```
-[Merchant Disputes Rating]
-           |
-           v
-[Step 1: Automated Verification Challenge]
-  - DNS TXT record or /.well-known/trustcheck.json challenge
-  - Verifies ownership of domain
-           |
-           v
-[Step 2: Automated Signal Recheck]
-  - Did merchant fix missing policy pages?
-  - Was company registration updated at Companies House?
-  - Has Safe Browsing delisted the domain?
-           |
-     +-----+-----+
-     |           |
-  [Resolved]   [Unresolved]
-     |           |
-     v           v
-[Instant Score [Step 3: Human Review Queue (5-day SLA)]
- Recalculation]  - Merchant submits invoice/business evidence
-                 - Manual review by TrustCheck operations
-                 - Domain whitelist or custom score annotation
-```
+## Privacy
 
-### 5.1 Dispute SLA & Process
-- **Intake Channel:** `trustcheck.app/merchant/dispute` and `support@trustcheck.app`.
-- **SLA:** Initial response within 48 hours; resolution or escalation within 5 business days.
-- **Automated Re-check:** When a merchant verifies ownership via `/.well-known/trustcheck.json`, the backend automatically purges cached network records (`net:<domain>`) and triggers a clean re-scan.
-
----
-
-## 6. Implementation Task Checklist
-
-### Phase A: UI & Warning Calibration (Week 1–2)
-- [x] Calibrate scoring engine so established domains ($\ge 5$ years, zero flags) never receive artificial caution caps (`3733c47`).
-- [x] Separate **Key trust checks** from **Most common feedback** headers in `content.js` (`3733c47`).
-- [x] Implement closed-shadow DOM checkout interstitial in `content.js` with 24h acknowledgment cache.
-- [ ] Add `role="alertdialog"` and keyboard focus trapping to checkout overlay in `content.js`.
-- [ ] Add explicit `"Safer Steps"` guide to interstitial card (chargeback protection advice, credit card usage).
-
-### Phase B: Backend Verification & Dispute Routing (Week 3–4)
-- [x] Implement `/v1/check` endpoint with server-side Safe Browsing and Companies House caching.
-- [x] Support merchant domain ownership verification via `/.well-known/trustcheck.json` (`store.js`).
-- [ ] Build public dispute submission form on landing page (`docs/trustcheck/dispute.html`).
-- [ ] Add dispute triage webhook notifying operations on new merchant appeals.
-
-### Phase C: Corpus Testing & Verification (Ongoing)
-- [x] Expand `test/corpus.test.js` to cover lookalikes, liquidation traps, payment hijacking, and outliers (66/66 passing).
-- [ ] Add specific unit tests for checkout interstitial triggers (`hasInsecurePaymentAction`, high-ratio non-delivery).
-- [ ] Validate false-positive rates against top 1,000 legitimate e-commerce domains.
+- The reminder lives on the buyer's computer until they answer.
+- The server receives the shop domain, the outcome, and the time. It does not receive who the buyer is.
+- The Trustpilot key stays on the server.
+- Reminders are off if the buyer turns them off, and a single order produces at most two notifications.

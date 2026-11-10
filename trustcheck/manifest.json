@@ -6,7 +6,9 @@
   "minimum_chrome_version": "110",
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
     "https://rdap.org/*",

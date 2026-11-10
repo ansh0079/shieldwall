@@ -21,14 +21,59 @@ const VERDICT_LABELS = {
 export function buildReport({
   url,
   domain,
-  signals,
+  signals = [],
   reviews = null,
   merchantRating = null,
   links = [],
   flagged = false,
   feedback = [],
-  buyerTotal = 0
+  buyerTotal = 0,
+  sixMonthNonDelivery = 0,
+  sixMonthNotMatched = 0
 }) {
+  signals = [...signals];
+
+  // Trustpilot review signals (Step 1)
+  if (reviews?.source === "Trustpilot" && reviews.score !== null && reviews.count >= 5 && !signals.some((s) => s.id === "tp")) {
+    if (reviews.score < 3.0) {
+      signals.push({
+        id: "tp",
+        label: `Trustpilot rating is ${reviews.score.toFixed(1)}/5 (${reviews.count} reviews)`,
+        status: "bad",
+        points: -25,
+        detail: "Recent reviews report orders that never arrived, or customer disputes."
+      });
+    } else if (reviews.score >= 4.0 && reviews.count >= 10) {
+      signals.push({
+        id: "tp",
+        label: `Trustpilot rating is ${reviews.score.toFixed(1)}/5 (${reviews.count} reviews)`,
+        status: "good",
+        points: 15,
+        detail: "Established positive customer review history."
+      });
+    }
+  }
+
+  // 6-month verified buyer non-delivery signal (Step 3)
+  if (sixMonthNonDelivery >= 2 && !signals.some((s) => s.id === "six-month-nondelivery")) {
+    signals.push({
+      id: "six-month-nondelivery",
+      label: `In the last 6 months, ${sixMonthNonDelivery} TrustCheck buyers reported this shop did not deliver`,
+      status: "bad",
+      points: -30,
+      detail: "Verified purchase-observed delivery reports from real buyers."
+    });
+  }
+  if (sixMonthNotMatched >= 2 && !signals.some((s) => s.id === "six-month-notmatched")) {
+    signals.push({
+      id: "six-month-notmatched",
+      label: `In the last 6 months, ${sixMonthNotMatched} TrustCheck buyers reported items did not match the listing`,
+      status: "bad",
+      points: -20,
+      detail: "Verified purchase-observed delivery reports from real buyers."
+    });
+  }
+
   const raw = 50 + signals.reduce((s, x) => s + (x.points || 0), 0);
   let score = Math.max(0, Math.min(100, raw));
   if (flagged) score = Math.min(score, 10);
@@ -110,6 +155,8 @@ export function buildReport({
     merchantRating: merchantRating || null,
     feedback,
     buyerTotal,
+    sixMonthNonDelivery,
+    sixMonthNotMatched,
     links,
     checkedAt: Date.now()
   };

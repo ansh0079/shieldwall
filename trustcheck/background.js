@@ -6,6 +6,7 @@ import { priceContext, priceSignals } from "./lib/price.js";
 import { buildReport } from "./lib/score.js";
 import { extractCompanyNumber, fetchCompany, companySignals } from "./lib/companies.js";
 import { fetchSummary, fetchCheck, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
+import { createReminder, handleReminderAnswer } from "./lib/reminders.js";
 
 const TTL = 6 * 3600 * 1000;
 const NET_CACHE_VERSION = 2; // v2 removes paid Trustpilot API data from cached scoring
@@ -52,11 +53,12 @@ async function analyze(url, tabId, force = false) {
   const scan = pageScans.get(tabId);
   const number = scan ? extractCompanyNumber((scan.legal || []).join(" ")) : null;
 
-  // Cloud backend check: unified Safe Browsing, Companies House & Buyer reports
+  // Cloud backend check: unified Safe Browsing, Companies House, Trustpilot & Buyer reports
   let buyer = null;
   let backendVerified = false;
   let serverSb = null;
   let serverCompanyProfile = null;
+  let serverReviews = null;
 
   if (backend) {
     const c = buyerCache.get(domain);
@@ -65,6 +67,7 @@ async function analyze(url, tabId, force = false) {
       backendVerified = !!c.verified;
       serverSb = c.sb || null;
       serverCompanyProfile = c.profile || null;
+      serverReviews = c.reviews || null;
     } else {
       try {
         const checkData = await fetchCheck(backend, domain, { url, companyNumber: number || "" });
@@ -72,11 +75,12 @@ async function analyze(url, tabId, force = false) {
         backendVerified = !!checkData.verifiedMerchant;
         serverSb = checkData.safeBrowsing || null;
         serverCompanyProfile = checkData.company?.profile || null;
-        buyerCache.set(domain, { at: Date.now(), sum: buyer, verified: backendVerified, sb: serverSb, profile: serverCompanyProfile });
+        serverReviews = checkData.reviews || null;
+        buyerCache.set(domain, { at: Date.now(), sum: buyer, verified: backendVerified, sb: serverSb, profile: serverCompanyProfile, reviews: serverReviews });
       } catch {
         try {
           buyer = await fetchSummary(backend, domain);
-          buyerCache.set(domain, { at: Date.now(), sum: buyer, verified: false, sb: null, profile: null });
+          buyerCache.set(domain, { at: Date.now(), sum: buyer, verified: false, sb: null, profile: null, reviews: null });
         } catch { /* server down: skip */ }
       }
     }
@@ -114,8 +118,29 @@ async function analyze(url, tabId, force = false) {
   const signals = [...priceSigs, ...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...historySignals(net), ...buyerSignals(buyer), ...companySigs];
   if (!chKey && !serverCompanyProfile && !backend) signals.push({ id: "co-off", label: "UK company check not connected", status: "info", points: 0, detail: "Add a free Companies House API key in Options to verify a shop's registered company." });
   if (!sbKey && !serverSb && !backend) signals.push({ id: "sb-off", label: "Malware/phishing database not connected", status: "info", points: 0, detail: "Add a free Google Safe Browsing key in Options for stronger protection." });
-  const report = buildReport({ url, domain, signals, reviews: null, merchantRating: scan?.merchantRating || null, links: reviewLinks(domain), flagged: net.flagged,
-    feedback: buyerFeedback(buyer), buyerTotal: buyer && !buyer.hidden ? buyer.total : 0 });
+
+  // Direct Trustpilot link is always present even if reviews API is unconfigured (Step 1)
+  const defaultReviews = serverReviews || {
+    source: "Trustpilot",
+    score: null,
+    count: null,
+    themes: [],
+    url: `https://www.trustpilot.com/review/${encodeURIComponent(domain)}`
+  };
+
+  const report = buildReport({
+    url,
+    domain,
+    signals,
+    reviews: defaultReviews,
+    merchantRating: scan?.merchantRating || null,
+    links: reviewLinks(domain),
+    flagged: net.flagged,
+    feedback: buyerFeedback(buyer),
+    buyerTotal: buyer && !buyer.hidden ? buyer.total : 0,
+    sixMonthNonDelivery: buyer?.sixMonthNonDelivery || 0,
+    sixMonthNotMatched: buyer?.sixMonthNotMatched || 0
+  });
   const purchase = (await chrome.storage.local.get("purchase:" + domain))["purchase:" + domain];
   if (purchase && Date.now() - purchase.at < 180 * 86400000) report.purchase = purchase;
   report.backendOn = !!backend;
@@ -150,8 +175,138 @@ async function rememberPurchase(tabUrl, scan) {
   if (!scan.purchaseObserved) return;
   const domain = registrableDomain(new URL(tabUrl).hostname), key = "purchase:" + domain;
   const old = (await chrome.storage.local.get(key))[key];
-  if (!old || Date.now() - old.at > 86400000)
-    await chrome.storage.local.set({ [key]: { id: crypto.randomUUID(), at: Date.now(), reported: false } });
+  if (!old || Date.now() - old.at > 86400000) {
+    const purchaseObj = {
+      id: crypto.randomUUID(),
+      at: Date.now(),
+      reported: false,
+      amount: scan.orderAmount || null,
+      storefrontName: scan.storefrontName || null,
+      receiverName: scan.receiverName || null
+    };
+    await chrome.storage.local.set({ [key]: purchaseObj });
+
+    // Step 2: Store local reminder 14 days in the future without personal data
+    try {
+      const { reminders = [] } = await chrome.storage.local.get({ reminders: [] });
+      if (!reminders.some((r) => r.domain === domain && Math.abs(r.createdAt - Date.now()) < 7 * 86400000)) {
+        const rem = createReminder({
+          domain,
+          amount: scan.orderAmount,
+          orderId: scan.orderId,
+          storefrontName: scan.storefrontName,
+          receiverName: scan.receiverName
+        });
+        reminders.push(rem);
+        await chrome.storage.local.set({ reminders });
+      }
+    } catch { /* storage unavailable */ }
+  }
+}
+
+// Step 2: 14-day reminder alarm & notification processor
+try {
+  chrome.alarms?.create("check_order_reminders", { periodInMinutes: 60 });
+} catch { /* alarms unsupported */ }
+
+export async function checkDueReminders() {
+  try {
+    const { orderReminders = true, reminders = [] } = await chrome.storage.local.get({ orderReminders: true, reminders: [] });
+    if (!orderReminders || !reminders.length) return;
+    const now = Date.now();
+    for (let i = 0; i < reminders.length; i++) {
+      const rem = reminders[i];
+      if (rem.status === "pending" && now >= rem.remindAt) {
+        if (chrome.notifications) {
+          chrome.notifications.create(rem.id, {
+            type: "basic",
+            iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+            title: "TrustCheck: Order update",
+            message: `Did your order from ${rem.domain}${rem.amount ? ` (${rem.amount})` : ""} arrive?`,
+            buttons: [
+              { title: "Yes, arrived" },
+              { title: "No, did not arrive" }
+            ],
+            requireInteraction: true
+          });
+        }
+        break;
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+if (chrome.alarms?.onAlarm) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "check_order_reminders") checkDueReminders();
+  });
+}
+checkDueReminders();
+
+// Handle notification button clicks (Yes/No/Not-yet)
+if (chrome.notifications?.onButtonClicked) {
+  chrome.notifications.onButtonClicked.addListener(async (notifId, buttonIndex) => {
+    try {
+      const { reminders = [], backend = "", installId = "" } = await chrome.storage.local.get({ reminders: [], backend: "", installId: "" });
+      const remIndex = reminders.findIndex((r) => r.id === notifId);
+      if (remIndex === -1) return;
+      const rem = reminders[remIndex];
+
+      if (buttonIndex === 0) {
+        // "Yes, arrived" -> ask follow-up question
+        chrome.notifications.clear(notifId);
+        chrome.notifications.create(rem.id + ":match", {
+          type: "basic",
+          iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+          title: "TrustCheck: Order update",
+          message: `Did the item from ${rem.domain} match the listing?`,
+          buttons: [
+            { title: "Yes, matched" },
+            { title: "No, did not match" }
+          ],
+          requireInteraction: true
+        });
+        return;
+      }
+
+      if (buttonIndex === 1) {
+        // "No, did not arrive"
+        chrome.notifications.clear(notifId);
+        const { updatedReminder, report } = handleReminderAnswer(rem, "no");
+        reminders[remIndex] = updatedReminder;
+        await chrome.storage.local.set({ reminders });
+
+        if (backend && report) {
+          let id = installId || crypto.randomUUID();
+          if (!installId) await chrome.storage.local.set({ installId: id });
+          submitReport(backend, id, report.domain, report.outcome, report.tags, report.purchaseId, report).catch(() => {});
+        }
+      }
+    } catch { /* ignore */ }
+  });
+
+  chrome.notifications.onButtonClicked.addListener(async (notifId, buttonIndex) => {
+    if (!notifId.endsWith(":match")) return;
+    try {
+      const baseId = notifId.replace(":match", "");
+      const { reminders = [], backend = "", installId = "" } = await chrome.storage.local.get({ reminders: [], backend: "", installId: "" });
+      const remIndex = reminders.findIndex((r) => r.id === baseId);
+      if (remIndex === -1) return;
+      const rem = reminders[remIndex];
+      chrome.notifications.clear(notifId);
+
+      const answer = buttonIndex === 0 ? "yes_matched" : "yes_unmatched";
+      const { updatedReminder, report } = handleReminderAnswer(rem, answer);
+      reminders[remIndex] = updatedReminder;
+      await chrome.storage.local.set({ reminders });
+
+      if (backend && report) {
+        let id = installId || crypto.randomUUID();
+        if (!installId) await chrome.storage.local.set({ installId: id });
+        submitReport(backend, id, report.domain, report.outcome, report.tags, report.purchaseId, report).catch(() => {});
+      }
+    } catch { /* ignore */ }
+  });
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {

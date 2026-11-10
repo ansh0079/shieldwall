@@ -5,6 +5,7 @@ import http from "node:http";
 import { Store } from "./store.js";
 import { safeBrowsing } from "../lib/providers.js";
 import { fetchCompany } from "../lib/companies.js";
+import { fetchTrustpilotSummary } from "./trustpilot.js";
 
 export function clientIp(req, trustProxy) {
   if (trustProxy) {
@@ -27,7 +28,7 @@ export function clientSubnet(ip) {
   return ip;
 }
 
-export function createServer(store, { rateLimit = 20, readLimit = 300, trustProxy = false, corsOrigin = "*", sbKey = "", chKey = "" } = {}) {
+export function createServer(store, { rateLimit = 20, readLimit = 300, trustProxy = false, corsOrigin = "*", sbKey = "", chKey = "", tpKey = "" } = {}) {
   const hits = new Map(); // `${kind}|${key}` -> timestamps (1h window)
   const serverCache = new Map(); // key -> { at, data }
 
@@ -170,13 +171,44 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
           }
         }
 
+        // Trustpilot summary lookup (server-cached)
+        let tpResult = null;
+        const tpCacheKey = "tp:" + clean;
+        const cachedTp = serverCache.get(tpCacheKey);
+        if (cachedTp && Date.now() - cachedTp.at < 6 * 3600 * 1000) {
+          tpResult = cachedTp.data;
+        } else {
+          try {
+            tpResult = await fetchTrustpilotSummary(clean, tpKey);
+            serverCache.set(tpCacheKey, { at: Date.now(), data: tpResult });
+          } catch {
+            tpResult = { source: "Trustpilot", score: null, count: null, themes: [], url: `https://www.trustpilot.com/review/${clean}` };
+          }
+        }
+
         return send(200, {
           domain: clean,
           summary,
           verifiedMerchant: !!ver,
           safeBrowsing: sbResult,
-          company: companyResult
+          company: companyResult,
+          reviews: tpResult
         }, { "cache-control": "public, max-age=60" });
+      }
+
+      if (req.method === "GET" && url.pathname === "/v1/export/orders") {
+        const domain = url.searchParams.get("domain") || null;
+        const format = url.searchParams.get("format") || "json";
+        const rows = store.getOrderLogs(domain);
+        if (format === "csv") {
+          const header = "Shop domain,Storefront name,Receiver name,Trustpilot score,Trustpilot reviews,Trustpilot URL,Outcome,Order date,Answer date\n";
+          const lines = rows.map((r) =>
+            [r.domain, r.storefrontName || "", r.receiverName || "", r.trustpilotScore ?? "", r.trustpilotCount ?? "", r.trustpilotUrl || "", r.outcome, r.orderDate || "", r.answerDate].map((f) => `"${String(f).replace(/"/g, '""')}"`).join(",")
+          ).join("\n");
+          res.writeHead(200, { "content-type": "text/csv", "content-disposition": "attachment; filename=orders-export.csv" });
+          return res.end(header + lines);
+        }
+        return send(200, { ok: true, total: rows.length, rows });
       }
 
       if (req.method === "GET" && url.pathname === "/v1/summary") {
@@ -198,7 +230,33 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
         req.on("end", () => {
           if (tooBig) return;
           try {
-            store.add(JSON.parse(body));
+            const data = JSON.parse(body);
+            store.add(data);
+
+            // Record in order log for payment processor export (Step 4)
+            if (data.purchaseId && (data.storefrontName || data.receiverName || data.outcome)) {
+              let tpScore = null, tpCount = null, tpUrl = "";
+              const tpCacheKey = "tp:" + Store.cleanDomain(data.domain);
+              const cached = serverCache.get(tpCacheKey);
+              if (cached?.data) {
+                tpScore = cached.data.score;
+                tpCount = cached.data.count;
+                tpUrl = cached.data.url;
+              }
+              const outcomeNormalized = data.outcome === "never" ? "did_not_arrive" : (data.tags && data.tags.includes("not_as_described")) ? "did_not_match" : "arrived";
+              store.addOrderLog({
+                domain: data.domain,
+                storefrontName: data.storefrontName,
+                receiverName: data.receiverName,
+                trustpilotScore: tpScore,
+                trustpilotCount: tpCount,
+                trustpilotUrl: tpUrl,
+                outcome: outcomeNormalized,
+                orderDate: data.orderDate || "",
+                answerDate: data.answerDate || new Date().toISOString()
+              });
+            }
+
             send(200, { ok: true });
           } catch (e) {
             const status = e.message.includes("limit") ? 429 : 400;
@@ -234,7 +292,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     trustProxy: env.TRUST_PROXY === "true",
     corsOrigin: env.CORS_ORIGIN || "*",
     sbKey: env.GOOGLE_SAFE_BROWSING_KEY || env.SAFE_BROWSING_KEY || "",
-    chKey: env.COMPANIES_HOUSE_KEY || ""
+    chKey: env.COMPANIES_HOUSE_KEY || "",
+    tpKey: env.TRUSTPILOT_API_KEY || ""
   });
   const timer = setInterval(() => store.flush(), 5000);
   const stop = () => {
