@@ -310,6 +310,29 @@ if (chrome.notifications?.onButtonClicked) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg.type === "testReminder") {
+    try {
+      if (chrome.notifications) {
+        chrome.notifications.create("test:reminder:" + Date.now(), {
+          type: "basic",
+          iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+          title: "TrustCheck: Order update (Test)",
+          message: "Did your order from koadclo.com (£59.99) arrive?",
+          buttons: [
+            { title: "Yes, arrived" },
+            { title: "No, did not arrive" }
+          ],
+          requireInteraction: true
+        });
+        reply({ ok: true });
+      } else {
+        reply({ ok: false, error: "Notifications API not available" });
+      }
+    } catch (e) {
+      reply({ ok: false, error: e.message });
+    }
+    return true;
+  }
   if (msg.type === "scan" && sender.tab) {
     pageScans.set(sender.tab.id, msg.scan);
     (async () => {

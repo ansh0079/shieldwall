@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>KOAD'CLO - Checkout | ASICS Gel-Kayano 31</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; line-height: 1.5; color: #1f2937; }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .item { display: flex; justify-content: space-between; border-bottom: 1px solid #f3f4f6; padding: 12px 0; }
+    .total { display: flex; justify-content: space-between; font-weight: bold; font-size: 18px; margin: 18px 0; }
+    .pay-btn { width: 100%; padding: 14px; background: #ffc439; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; color: #003087; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .pay-btn:hover { background: #f2ba32; }
+    .merchant-info { font-size: 12px; color: #6b7280; text-align: center; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>KOAD'CLO Checkout</h2>
+    <div class="item">
+      <div>
+        <strong>ASICS Gel-Kayano 31 (Silver / Coral)</strong><br>
+        <span style="color:#6b7280; font-size:13px;">Size: UK 9 · Qty: 1</span>
+      </div>
+      <div>£59.99</div>
+    </div>
+    <div class="total">
+      <span>Total to pay:</span>
+      <span>£59.99</span>
+    </div>
+
+    <!-- Payment form representing checkout -->
+    <form action="/checkout/pay" method="POST">
+      <input type="hidden" name="item" value="ASICS Gel-Kayano 31">
+      <input type="hidden" name="amount" value="59.99">
+      <button type="submit" class="pay-btn" name="pay-now">
+        <span>Pay with PayPal</span>
+      </button>
+    </form>
+    <div class="merchant-info">
+      Payment processed via PayPal to <strong>IDJ GROUP LLC</strong>
+    </div>
+  </div>
+</body>
+</html>
