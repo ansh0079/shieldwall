@@ -41,7 +41,9 @@ export async function startServer({ dbFile, env = {}, tag = "srv" } = {}) {
 
 export async function call(base, p, { method = "GET", body, token, ip, headers = {}, raw } = {}) {
   const h = { ...(body !== undefined ? { "content-type": "application/json" } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), ...(ip ? { "x-forwarded-for": ip } : {}), ...headers };
-  const res = await fetch(base + p, { method, headers: h, body: raw ?? (body === undefined ? undefined : JSON.stringify(body)) });
+  let res;
+  try { res = await fetch(base + p, { method, headers: h, body: raw ?? (body === undefined ? undefined : JSON.stringify(body)) }); }
+  catch (e) { const c = e.cause; e.message = `${e.message} (${method} ${p}: ${c?.code || ""} ${c?.message || c || "no cause"})`; throw e; }   // keep the transport-level reason
   const text = await res.text(); let json = null; try { json = JSON.parse(text); } catch { /* not json */ }
   return { status: res.status, json, text, headers: res.headers };
 }

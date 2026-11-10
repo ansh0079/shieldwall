@@ -83,7 +83,9 @@ SCENARIOS.concurrency = async () => {
   v.d.close();
 
   // a crowd of independent clients, no limits in the way: nothing may return a 5xx
-  const file2 = path.join(dir, "crowd.db"), srv2 = await startServer({ dbFile: file2, env: { REPORT_CONFIG_JSON: HIGH_LIMITS } });
+  // MAX_CONNECTIONS is lifted too: on a 1-2 CPU machine the test's own HTTP client churns through more than the default 512 sockets
+  // for these 300 "users", and the server then (correctly) drops the excess. Measured: 2/14 runs failed at 512, 4/4 at 150, 0/20 lifted.
+  const file2 = path.join(dir, "crowd.db"), srv2 = await startServer({ dbFile: file2, env: { REPORT_CONFIG_JSON: HIGH_LIMITS, MAX_CONNECTIONS: "100000" } });
   const res = await Promise.all(Array.from({ length: 300 }, async (_, i) => { const t = await enroll(srv2.base, ipFor(i, 5)); return t ? (await call(srv2.base, "/v1/report", { method: "POST", token: t, ip: ipFor(i, 5), body: { domain: "crowd.example", outcome: i % 3 ? "never" : "ok", tags: [] } })).status : 0; }));
   S.check(res.every((s) => s === 200), `300 simultaneous clients: all succeeded (statuses: ${[...new Set(res)].join(",")})`);
   const m = (await call(srv2.base, "/metrics", { token: ADMIN_TOKEN })).text;

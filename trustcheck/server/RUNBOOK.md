@@ -17,6 +17,7 @@ Setup is in `DEPLOY.md`. All commands run in the container (`docker compose exec
 | `readyz` 503 not draining | DB unreachable or schema mismatch | `cli.js status`; if "newer schema", you deployed an old image over a migrated DB: roll the image forward, never edit the DB |
 | auth failures spiking (`auth_failures_total`) | token guessing or a stale client | check source in your proxy logs (the app log redacts addresses); lockout is automatic (10 failures/hour) |
 | moderation queue growing | possible coordinated campaign | review `/admin/queue`; see "Moderation" |
+| clients report dropped connections ("socket closed") under load | the server hit `MAX_CONNECTIONS` (default 512) and is refusing new sockets, by design | check open connections at the proxy; raise `MAX_CONNECTIONS` if the host has headroom, or let the reverse proxy queue/limit instead |
 | process restarts in a loop | config refused or crash | read the first log line: config errors list every problem; `uncaught_exception` names the fault |
 
 ## Routine procedures
