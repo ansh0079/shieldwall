@@ -11,7 +11,8 @@ const ROOT = path.join(__dirname, "..");
 const DEFAULT_OUT = path.join(ROOT, "quietbrowse-firefox.xpi");
 const outPath = path.resolve(process.argv[2] || DEFAULT_OUT);
 
-const EXCLUDE_DIRS = new Set(["_metadata", "tools", "docs", ".git", "node_modules", "assets"]);
+// trustcheck/ is a separate extension in this repo; .github/ is CI config.
+const EXCLUDE_DIRS = new Set(["_metadata", "tools", "docs", ".git", ".github", "node_modules", "assets", "trustcheck"]);
 const EXCLUDE_FILES = new Set([
   "manifest.firefox.json",  // will be injected as manifest.json
   ".gitignore",

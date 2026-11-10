@@ -38,19 +38,31 @@
   const TEXT_RE =
     /^(reject all|reject|decline all|decline|refuse all|refuse|deny|necessary only|only necessary|essentials only|continue without|no thanks)$/i;
 
-  const CMP_CONTEXT_RE =
-    /cookie|consent|cmp|gdpr|privacy|onetrust|didomi|sourcepoint|osano|truste|cookiebot|qc-cmp|cmplz|complianz|borlabs|usercentrics|iubenda|quantcast/i;
+  const CMP_CONTAINER = "#onetrust-banner-sdk, #CybotCookiebotDialog, #didomi-host, " +
+    ".fc-consent-root, #cmpbox, .cc-window, .cmplz-cookiebanner, " +
+    "#cookie-banner, .cookie-banner, #cookie-notice, .cookie-notice, " +
+    "#cookie-consent, .cookie-consent, #gdpr-banner, .gdpr-banner";
 
   let attempted = false;
   let doneSignaled = false;
+  let outcome = null;
+  let observer;
+  let scanTimer;
 
-  function signalDone(rejected) {
+  function signalDone(status) {
     if (doneSignaled) return;
     doneSignaled = true;
+    outcome = status;
+    observer?.disconnect();
+    clearTimeout(scanTimer);
     document.dispatchEvent(
-      new CustomEvent("qb-cookie-reject-done", { detail: { rejected: !!rejected } })
+      new Event("qb-cookie-reject-done")
     );
   }
+
+  chrome.runtime.onMessage.addListener((message, _sender, respond) => {
+    if (message.type === "getCookieOutcome") respond({ outcome });
+  });
 
   function visible(el) {
     if (!el || !(el instanceof Element)) return false;
@@ -60,33 +72,21 @@
     return r.width > 0 && r.height > 0;
   }
 
-  // True when the element sits inside something that looks like a consent
-  // dialog (id/class of an ancestor mentions cookies/consent/a CMP vendor).
-  function inCmpContext(el) {
-    let node = el;
-    for (let depth = 0; node && node !== document.documentElement && depth < 12; depth++) {
-      const id = node.id || "";
-      const cls = typeof node.className === "string" ? node.className : "";
-      if (CMP_CONTEXT_RE.test(id) || CMP_CONTEXT_RE.test(cls)) return true;
-      const aria = node.getAttribute?.("aria-label") || "";
-      if (CMP_CONTEXT_RE.test(aria)) return true;
-      node = node.parentElement;
-    }
-    return false;
-  }
-
   function clickEl(el) {
+    if (el.matches(":disabled, [aria-disabled='true']")) return false;
+    const banner = el.parentElement?.closest(CMP_CONTAINER);
     try {
       el.click();
-      return true;
     } catch {
-      try {
-        el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-        return true;
-      } catch {
-        return false;
-      }
+      return false;
     }
+    attempted = true;
+    setTimeout(() => {
+      // A disappearing banner does not establish which consent was stored.
+      const dismissed = banner && (!banner.isConnected || !visible(banner));
+      signalDone(dismissed ? "dismissed-after-attempt" : "attempted");
+    }, 400);
+    return true;
   }
 
   function tryMatches(selectors, requireContext) {
@@ -99,33 +99,25 @@
       }
       for (const el of nodes) {
         if (!visible(el)) continue;
-        if (requireContext && !inCmpContext(el)) continue;
-        if (clickEl(el)) {
-          attempted = true;
-          signalDone(true);
-          return true;
-        }
+        if (requireContext && (!el.parentElement?.closest(CMP_CONTAINER) ||
+          !TEXT_RE.test((el.getAttribute("aria-label") || el.textContent || "").trim()))) continue;
+        if (clickEl(el)) return true;
       }
     }
     return false;
   }
 
   function tryReject() {
-    if (attempted) return false;
+    if (attempted || doneSignaled) return false;
     if (tryMatches(VENDOR_SELECTORS, false)) return true;
     if (tryMatches(GENERIC_SELECTORS, true)) return true;
 
-    const candidates = document.querySelectorAll("button, a, [role='button']");
-    for (const el of candidates) {
-      if (!visible(el)) continue;
-      if (!inCmpContext(el)) continue;
-      const label = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ");
-      if (!label || label.length > 40) continue;
-      if (!TEXT_RE.test(label)) continue;
-      if (clickEl(el)) {
-        attempted = true;
-        signalDone(true);
-        return true;
+    for (const banner of document.querySelectorAll(CMP_CONTAINER)) {
+      for (const el of banner.querySelectorAll("button, a, [role='button']")) {
+        if (!visible(el)) continue;
+        const label = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ");
+        if (!TEXT_RE.test(label)) continue;
+        if (clickEl(el)) return true;
       }
     }
     return false;
@@ -137,12 +129,16 @@
     setTimeout(tryReject, 2000);
     setTimeout(() => {
       tryReject();
-      signalDone(attempted);
+      if (!attempted) {
+        const bannerVisible = [...document.querySelectorAll(CMP_CONTAINER)].some(visible);
+        signalDone(bannerVisible ? "hide-fallback" : null);
+      }
     }, 4500);
   }
 
-  chrome.storage.local.get({ enabled: true, hideCookiePopups: true, siteModes: {} }, (data) => {
+  chrome.storage.local.get({ enabled: true, hideCookiePopups: true, siteModes: {}, siteContentExceptions: {} }, (data) => {
     if (!data.enabled || !data.hideCookiePopups) return;
+    if (getSiteContentException(location.hostname, data.siteContentExceptions)?.stage === "page") return;
     if (typeof resolveSiteMode === "function" && typeof SITE_MODE !== "undefined") {
       const mode = resolveSiteMode(location.hostname, data.siteModes);
       if (mode === SITE_MODE.OFF) return;
@@ -152,10 +148,13 @@
     } else {
       schedule();
     }
-    const mo = new MutationObserver(() => {
-      if (!attempted) tryReject();
+    observer = new MutationObserver(() => {
+      if (attempted || scanTimer != null) return;
+      scanTimer = setTimeout(() => {
+        scanTimer = null;
+        tryReject();
+      }, 100);
     });
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-    setTimeout(() => mo.disconnect(), 8000);
+    if (!doneSignaled) observer.observe(document, { childList: true, subtree: true });
   });
 })();

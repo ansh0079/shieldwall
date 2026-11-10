@@ -19,7 +19,8 @@ const DEFAULT_OUT = path.join(ROOT, "quietbrowse.zip");
 const outPath = path.resolve(process.argv[2] || DEFAULT_OUT);
 
 // Patterns excluded from the zip (relative to ROOT, matched against each entry path)
-const EXCLUDE_DIRS = new Set(["_metadata", "tools", "docs", ".git", "node_modules", "assets"]);
+// trustcheck/ is a separate extension in this repo; .github/ is CI config.
+const EXCLUDE_DIRS = new Set(["_metadata", "tools", "docs", ".git", ".github", "node_modules", "assets", "trustcheck"]);
 const EXCLUDE_FILES = new Set([
   "manifest.firefox.json",
   ".gitignore",

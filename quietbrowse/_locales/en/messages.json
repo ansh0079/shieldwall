@@ -376,11 +376,11 @@
     "description": "Popup trust score label."
   },
   "popupBlockedOnPage": {
-    "message": "blocked on page",
+    "message": "estimated blocks on page",
     "description": "Popup statistic label."
   },
   "popupBlockedTotal": {
-    "message": "blocked total",
+    "message": "estimated blocks total",
     "description": "Popup statistic label."
   },
   "popupNoTrackersYet": {
@@ -396,7 +396,7 @@
     "description": "Empty diagnostics list in popup."
   },
   "popupFixSiteBtn": {
-    "message": "Fix this site",
+    "message": "Fix page display",
     "description": "Popup button label."
   },
   "popupAllowAdsQuick": {
@@ -408,7 +408,7 @@
     "description": "Popup checkbox label."
   },
   "popupFixSiteHint": {
-    "message": "Pauses blocking on this site instantly. Reload the page after.",
+    "message": "Pauses page hiding and scriptlets. Network protection stays on.",
     "description": "Popup hint text."
   },
   "popupZapBtn": {

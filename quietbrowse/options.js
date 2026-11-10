@@ -66,9 +66,11 @@ const exportAllBtn = document.getElementById("exportAllBtn");
 const importAllBtn = document.getElementById("importAllBtn");
 const importAllFile = document.getElementById("importAllFile");
 const filterStatusStats = document.getElementById("filterStatusStats");
+const permissionAuditEl = document.getElementById("permissionAudit");
 
 let state = {
   siteModes: {},
+  siteContentExceptions: {},
   learnedSeen: {},
   learnedBlocked: [],
   learnedCandidates: {},
@@ -204,6 +206,7 @@ exportAllBtn?.addEventListener("click", () => {
     cnameUncloak: state.cnameUncloak,
     scriptletCatalog: state.scriptletCatalog,
     siteModes: state.siteModes,
+    siteContentExceptions: state.siteContentExceptions,
     learnedSeen: state.learnedSeen,
     learnedBlocked: state.learnedBlocked,
     learnedCandidates: state.learnedCandidates,
@@ -315,6 +318,13 @@ function renderAll() {
     autoBlockToggle.checked = state.autoBlockLearned === true;
   }
   renderUndoState();
+  if (permissionAuditEl) {
+    const audit = state.permissionAudit || {};
+    permissionAuditEl.textContent =
+      `All-site access: required for page protection · ` +
+      `Cookies: ${audit.cookies ? "granted" : "not granted"} · ` +
+      `Downloads: ${audit.downloads ? "granted" : "not granted"}`;
+  }
 }
 
 function renderDnrBudget() {
@@ -566,7 +576,13 @@ function drawChart(dailyBlocked) {
 function renderSiteModes() {
   whitelistList.innerHTML = "";
   const domains = Object.keys(state.siteModes).sort();
-  whitelistEmpty.classList.toggle("hidden", domains.length > 0);
+  const now = Date.now();
+  const pageFixes = Object.keys(state.siteContentExceptions || {}).filter((domain) => {
+    const raw = state.siteContentExceptions[domain];
+    const fix = raw === true ? { stage: "page", permanent: true } : raw;
+    return Boolean(fix && (fix.permanent || !fix.expiresAt || fix.expiresAt > now));
+  }).sort();
+  whitelistEmpty.classList.toggle("hidden", domains.length > 0 || pageFixes.length > 0);
 
   for (const domain of domains) {
     const mode = state.siteModes[domain];
@@ -607,6 +623,45 @@ function renderSiteModes() {
     actions.appendChild(removeBtn);
     li.appendChild(main);
     li.appendChild(actions);
+    whitelistList.appendChild(li);
+  }
+  for (const domain of pageFixes) {
+    const raw = state.siteContentExceptions[domain];
+    const fix = raw === true ? { stage: "page", permanent: true } : raw;
+    const li = document.createElement("li");
+    const main = document.createElement("div");
+    main.className = "item-main";
+    const scope = fix.stage === "page"
+      ? "Page filtering and scriptlets paused"
+      : "Cosmetic filtering paused";
+    const duration = fix.permanent
+      ? "Kept until restored"
+      : `Expires ${new Date(fix.expiresAt).toLocaleString()}`;
+    main.innerHTML = `<div class="item-title">${escapeHtml(domain)}</div>` +
+      `<div class="item-meta">${scope} · ${escapeHtml(duration)}</div>`;
+    const button = document.createElement("button");
+    button.className = "btn-sm";
+    button.textContent = "Restore page protection";
+    button.onclick = () => {
+      chrome.runtime.sendMessage({ type: "clearContentException", domain }, (result) => {
+        if (chrome.runtime.lastError || !result?.ok) {
+          alert(result?.error || "Could not restore page protection.");
+          return;
+        }
+        load();
+      });
+    };
+    li.append(main);
+    if (!fix.permanent) {
+      const keepButton = document.createElement("button");
+      keepButton.className = "btn-sm";
+      keepButton.textContent = "Keep";
+      keepButton.onclick = () => {
+        chrome.runtime.sendMessage({ type: "keepContentException", domain }, () => load());
+      };
+      li.appendChild(keepButton);
+    }
+    li.appendChild(button);
     whitelistList.appendChild(li);
   }
 }

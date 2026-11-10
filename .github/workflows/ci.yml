@@ -26,6 +26,14 @@ jobs:
         working-directory: quietbrowse
         run: node tools/test_unit.js
 
+      - name: Run independent blocking corpus
+        working-directory: quietbrowse
+        run: node tools/benchmark.js --gate
+
+      - name: Run browser behavior tests
+        working-directory: quietbrowse
+        run: node tools/qa_chrome.js
+
   trustcheck:
     runs-on: ubuntu-latest
     steps:

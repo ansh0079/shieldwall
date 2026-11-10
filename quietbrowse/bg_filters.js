@@ -15,6 +15,86 @@ const MAX_FILTER_UPDATE_BYTES = 50 * 1024 * 1024;
 // Reject a new compiled set if its block-rule count drops more than 50 % below
 // the last accepted count — guards against a poisoned or stripped replacement.
 const MAX_RULE_DROP_FRACTION = 0.50;
+const FILTER_TRANSACTION_KEY = "pendingFilterUpdate";
+
+async function readCurrentFilterSnapshot() {
+  const state = await chrome.storage.local.get({
+    updatedRules: null,
+    useUpdatedLists: false,
+    genericSelectors: null,
+    proceduralRules: [],
+    cosmeticDomains: [],
+    lastFilterUpdate: 0
+  });
+  const cosmeticKeys = state.cosmeticDomains.flatMap((domain) => ["cs_" + domain, "cx_" + domain]);
+  const cosmeticValues = cosmeticKeys.length
+    ? await chrome.storage.local.get(cosmeticKeys)
+    : {};
+  const siteHide = {};
+  const siteUnhide = {};
+  for (const domain of state.cosmeticDomains) {
+    if (Array.isArray(cosmeticValues["cs_" + domain])) siteHide[domain] = cosmeticValues["cs_" + domain];
+    if (Array.isArray(cosmeticValues["cx_" + domain])) siteUnhide[domain] = cosmeticValues["cx_" + domain];
+  }
+  return {
+    rules: state.updatedRules,
+    useUpdatedLists: state.useUpdatedLists,
+    genericSelectors: state.genericSelectors,
+    proceduralRules: state.proceduralRules,
+    siteHide,
+    siteUnhide,
+    lastFilterUpdate: state.lastFilterUpdate
+  };
+}
+
+async function applyFilterSnapshot(snapshot, enabled) {
+  if (!snapshot) throw new Error("Missing filter snapshot");
+  if (snapshot.useUpdatedLists && !Array.isArray(snapshot.rules)) {
+    throw new Error("Filter snapshot has no rules");
+  }
+  if (enabled && snapshot.useUpdatedLists) {
+    await applyUpdatedRulesToDnr(snapshot.rules);
+    await chrome.declarativeNetRequest.updateEnabledRulesets({
+      disableRulesetIds: [EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID]
+    });
+  } else if (enabled) {
+    await applyUpdatedRulesToDnr([]);
+    await chrome.declarativeNetRequest.updateEnabledRulesets({
+      enableRulesetIds: [EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID]
+    });
+  }
+  await seedSiteCosmetics(snapshot.siteHide || {}, snapshot.siteUnhide || {});
+  await chrome.storage.local.set({
+    updatedRules: snapshot.rules,
+    useUpdatedLists: snapshot.useUpdatedLists === true,
+    genericSelectors: snapshot.genericSelectors,
+    proceduralRules: Array.isArray(snapshot.proceduralRules) ? snapshot.proceduralRules : [],
+    lastFilterUpdate: snapshot.lastFilterUpdate || 0,
+    dnrBudget: await getDnrBudget(snapshot.rules?.length || 0),
+    filterUpdateError: null
+  });
+}
+
+async function reconcilePendingFilterUpdate() {
+  const data = await chrome.storage.local.get({ pendingFilterUpdate: null, enabled: true });
+  const transaction = data.pendingFilterUpdate;
+  if (!transaction) return { recovered: false };
+  try {
+    await applyFilterSnapshot(transaction.candidate, data.enabled);
+    await chrome.storage.local.remove(FILTER_TRANSACTION_KEY);
+    return { recovered: true, generation: transaction.generation };
+  } catch (candidateError) {
+    try {
+      await applyFilterSnapshot(transaction.previous, data.enabled);
+      await chrome.storage.local.remove(FILTER_TRANSACTION_KEY);
+    } catch (rollbackError) {
+      throw new Error(
+        `Filter recovery failed: ${candidateError.message}; rollback failed: ${rollbackError.message}`
+      );
+    }
+    throw new Error(`Filter update rolled back during startup: ${candidateError.message}`);
+  }
+}
 
 function defaultOptionalToggles() {
   const out = {};
@@ -171,11 +251,8 @@ async function updateFilterLists() {
   }
   filterUpdateInProgress = true;
 
-  const prev = await chrome.storage.local.get({
-    updatedRules: null,
-    useUpdatedLists: false,
-    genericSelectors: null
-  });
+  await reconcilePendingFilterUpdate();
+  const previous = await readCurrentFilterSnapshot();
   const { enabled } = await chrome.storage.local.get({ enabled: true });
 
   try {
@@ -229,7 +306,7 @@ async function updateFilterLists() {
           `(expected ${MIN_SANE_BLOCK_RULES}+) — aborting to keep current lists safe`
       );
     }
-    const prevRuleCount = prev.updatedRules?.length ?? 0;
+    const prevRuleCount = previous.rules?.length ?? 0;
     if (prevRuleCount > 0 && c.blockRules.length < prevRuleCount * (1 - MAX_RULE_DROP_FRACTION)) {
       throw new Error(
         `Compiled ${c.blockRules.length} block rules but last accepted count was ` +
@@ -247,42 +324,35 @@ async function updateFilterLists() {
       }))
     ];
 
-    if (enabled) {
-      try {
-        await applyUpdatedRulesToDnr(rules);
-      } catch (e) {
-        if (prev.useUpdatedLists && prev.updatedRules?.length) {
-          try {
-            await applyUpdatedRulesToDnr(prev.updatedRules);
-          } catch {
-            await chrome.declarativeNetRequest
-              .updateEnabledRulesets({ enableRulesetIds: [EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID] })
-              .catch(() => {});
-          }
-        } else {
-          await chrome.declarativeNetRequest
-            .updateEnabledRulesets({ enableRulesetIds: [EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID] })
-            .catch(() => {});
-        }
-        throw new Error("Dynamic rule install failed: " + e.message);
-      }
-
-      await chrome.declarativeNetRequest.updateEnabledRulesets({
-        disableRulesetIds: [EASYLIST_RULESET_ID, EASYPRIVACY_RULESET_ID]
-      });
-    }
-
-    await seedSiteCosmetics(c.siteHide, c.siteUnhide);
-    await seedProceduralRules(c.proceduralRules);
-
-    await chrome.storage.local.set({
-      updatedRules: rules,
-      genericSelectors: c.genericSelectors,
-      lastFilterUpdate: Date.now(),
+    const proceduralRules = flattenProceduralRules(c.proceduralRules);
+    const candidate = {
+      rules,
       useUpdatedLists: true,
-      dnrBudget: await getDnrBudget(rules.length),
-      filterUpdateError: null
-    });
+      genericSelectors: c.genericSelectors,
+      proceduralRules,
+      siteHide: c.siteHide,
+      siteUnhide: c.siteUnhide,
+      lastFilterUpdate: Date.now()
+    };
+    const transaction = {
+      generation: crypto.randomUUID?.() || String(Date.now()),
+      createdAt: Date.now(),
+      previous,
+      candidate
+    };
+    await chrome.storage.local.set({ [FILTER_TRANSACTION_KEY]: transaction });
+    try {
+      await applyFilterSnapshot(candidate, enabled);
+      await chrome.storage.local.remove(FILTER_TRANSACTION_KEY);
+    } catch (e) {
+      try {
+        await applyFilterSnapshot(previous, enabled);
+        await chrome.storage.local.remove(FILTER_TRANSACTION_KEY);
+      } catch (rollbackError) {
+        throw new Error(`Filter install failed: ${e.message}; rollback failed: ${rollbackError.message}`);
+      }
+      throw new Error("Filter install failed and was rolled back: " + e.message);
+    }
 
     console.log(`QuietBrowse: filter lists updated (${rules.length} rules from ${texts.length} lists)`);
     return rules.length;
@@ -297,6 +367,7 @@ async function updateFilterLists() {
 }
 
 async function syncUpdatedRules() {
+  await reconcilePendingFilterUpdate();
   const data = await chrome.storage.local.get({
     updatedRules: null,
     useUpdatedLists: false
@@ -402,7 +473,7 @@ async function seedSiteCosmetics(siteHide, siteUnhide) {
 
 const MAX_PROC_RULES = 2000;
 
-async function seedProceduralRules(proceduralRules) {
+function flattenProceduralRules(proceduralRules) {
   if (!proceduralRules || typeof proceduralRules !== "object") return;
   const flat = [];
   // Site-specific first (higher value, lower volume)
@@ -419,7 +490,12 @@ async function seedProceduralRules(proceduralRules) {
     if (flat.length >= MAX_PROC_RULES) break;
     flat.push({ ...r, domains: [] });
   }
-  await chrome.storage.local.set({ proceduralRules: flat });
+  return flat;
+}
+
+async function seedProceduralRules(proceduralRules) {
+  const flat = flattenProceduralRules(proceduralRules);
+  if (flat) await chrome.storage.local.set({ proceduralRules: flat });
 }
 
 async function seedBundledCosmetics() {

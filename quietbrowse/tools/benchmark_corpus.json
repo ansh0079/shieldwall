@@ -1,0 +1,24 @@
+{
+  "blocked": [
+    "https://ad.doubleclick.net/ad.js",
+    "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+    "https://www.google-analytics.com/analytics.js",
+    "https://connect.facebook.net/en_US/fbevents.js",
+    "https://static.hotjar.com/c/hotjar.js",
+    "https://sb.scorecardresearch.com/beacon.js",
+    "https://cdn.taboola.com/libtrc.js",
+    "https://widgets.outbrain.com/outbrain.js",
+    "https://ads-twitter.com/uwt.js",
+    "https://c.amazon-adsystem.com/aax2/apstag.js"
+  ],
+  "allowed": [
+    "https://cdn.jsdelivr.net/npm/lodash@4/lodash.min.js",
+    "https://login.microsoftonline.com/common/oauth2/authorize",
+    "https://js.stripe.com/v3/",
+    "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js",
+    "https://raw.githubusercontent.com/github/gitignore/main/Node.gitignore",
+    "https://fonts.googleapis.com/css2?family=Inter",
+    "https://images.unsplash.com/photo-example",
+    "https://api.github.com/repos/github/gitignore"
+  ]
+}

@@ -13,10 +13,10 @@ const ROOT = path.join(__dirname, "..");
 function findChrome() {
   const candidates = [
     process.env.CHROME_PATH,
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     "/usr/bin/google-chrome",
@@ -47,8 +47,12 @@ async function readDevToolsPort(userDataDir) {
   const file = path.join(userDataDir, "DevToolsActivePort");
   for (let i = 0; i < 80; i++) {
     if (fs.existsSync(file)) {
-      const [port] = fs.readFileSync(file, "utf8").trim().split(/\r?\n/);
-      return Number(port);
+      try {
+        const [port] = fs.readFileSync(file, "utf8").trim().split(/\r?\n/);
+        if (Number(port)) return Number(port);
+      } catch (error) {
+        if (error.code !== "EBUSY") throw error;
+      }
     }
     await wait(250);
   }
@@ -62,10 +66,43 @@ async function json(url) {
 }
 
 function startFixtureServer() {
+  const hits = { ad: 0, legitimate: 0 };
   const server = http.createServer((req, res) => {
+    if (req.url === "/network-ad.js") {
+      hits.ad += 1;
+      res.setHeader("content-type", "application/javascript");
+      res.end("window.adNetworkLoaded = true;");
+      return;
+    }
+    if (req.url === "/network-legitimate.js") {
+      hits.legitimate += 1;
+      res.setHeader("content-type", "application/javascript");
+      res.end("window.legitimateNetworkLoaded = true;");
+      return;
+    }
     res.setHeader("content-type", "text/html; charset=utf-8");
+    if (req.url === "/network") {
+      const fixturePort = server.address().port;
+      res.end(`<!doctype html><title>Network fixture</title>
+        <script src="http://pagead2.googlesyndication.com:${fixturePort}/network-ad.js"></script>
+        <script src="http://cdn.jsdelivr.net:${fixturePort}/network-legitimate.js"></script>`);
+      return;
+    }
     if (req.url === "/login") {
       res.end(`<!doctype html><title>Login</title><form><input name="user"><input type="password"></form>`);
+      return;
+    }
+    if (req.url === "/cookie") {
+      res.end(`<!doctype html><title>Cookie fixture</title>
+        <button onclick="window.unrelatedClicked = true">Decline</button>
+        <div id="cookie-consent"><button onclick="window.rejectClicked = true; this.parentElement.remove()">Reject all</button></div>
+        <main id="app">Page still works</main>`);
+      return;
+    }
+    if (req.url === "/no-cookie") {
+      res.end(`<!doctype html><title>No banner</title><div class="privacy-invitation">
+        <button onclick="window.unrelatedClicked = true">Decline</button>
+        </div><main id="app">Page still works</main>`);
       return;
     }
     res.end(`<!doctype html><title>Ads</title><div class="adsbygoogle">ad</div><div id="app">ok</div>`);
@@ -75,6 +112,7 @@ function startFixtureServer() {
     server.listen(0, "127.0.0.1", () => {
       resolve({
         server,
+        hits,
         origin: `http://127.0.0.1:${server.address().port}`
       });
     });
@@ -150,6 +188,7 @@ async function main() {
     `--user-data-dir=${userDataDir}`,
     `--disable-extensions-except=${ROOT}`,
     `--load-extension=${ROOT}`,
+    "--host-resolver-rules=MAP pagead2.googlesyndication.com 127.0.0.1, MAP cdn.jsdelivr.net 127.0.0.1",
     "about:blank"
   ];
 
@@ -165,18 +204,22 @@ async function main() {
       await wait(250);
     }
 
-    const extensionTargets = targets.filter((t) =>
-      t.url?.startsWith("chrome-extension://")
-    );
-    if (!extensionTargets.length) {
-      throw new Error("No chrome-extension target appeared");
-    }
-
-    const background = extensionTargets.find((t) =>
-      t.type === "service_worker" || /\/background(\.rollup)?\.js$/.test(t.url)
+    const debugTargets = await json(`http://127.0.0.1:${port}/json/list`);
+    const background = debugTargets.find((target) =>
+      target.type === "service_worker" && /\/background\.js$/.test(target.url || "")
     );
     if (!background) {
-      throw new Error("Extension loaded, but background service worker was not visible");
+      throw new Error("QuietBrowse background service worker was not visible");
+    }
+    const networkPage = await createPageTarget(port, fixtures.origin + "/network");
+    await waitForExpression(networkPage.webSocketDebuggerUrl,
+      "Boolean(window.legitimateNetworkLoaded)", "legitimate network request");
+    const networkState = await cdpCommand(networkPage.webSocketDebuggerUrl, "Runtime.evaluate", {
+      expression: "({ adLoaded: Boolean(window.adNetworkLoaded), legitimateLoaded: Boolean(window.legitimateNetworkLoaded) })",
+      returnByValue: true
+    });
+    if (networkState.result?.value?.adLoaded || fixtures.hits.ad !== 0 || fixtures.hits.legitimate < 1) {
+      throw new Error(`Network filtering failed: ${JSON.stringify({ page: networkState.result?.value, hits: fixtures.hits })}`);
     }
 
     const adPage = await createPageTarget(port, fixtures.origin + "/ads");
@@ -192,6 +235,15 @@ async function main() {
       "Boolean(document.getElementById('__qb_phish_overlay') || document.getElementById('__qb_phish_banner'))",
       "phishing/login warning UI"
     );
+
+    const cookiePage = await createPageTarget(port, fixtures.origin + "/cookie");
+    await waitForExpression(cookiePage.webSocketDebuggerUrl,
+      "Boolean(window.rejectClicked && !window.unrelatedClicked && document.getElementById('app'))",
+      "cookie rejection without unrelated clicks");
+    const noCookiePage = await createPageTarget(port, fixtures.origin + "/no-cookie");
+    await waitForExpression(noCookiePage.webSocketDebuggerUrl,
+      "Boolean(document.getElementById('__qb_styles_cookie') && !window.unrelatedClicked && document.getElementById('app'))",
+      "unrelated Decline button left alone");
 
     console.log("Chrome smoke passed");
     console.log(`  ${background.type}: ${background.url}`);
