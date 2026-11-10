@@ -2,6 +2,23 @@
 
 All notable changes to QuietBrowse are documented here.
 
+## [4.8.0] — 2026-11-09
+
+### Changed
+- **Fix page display** — staged recovery: first click pauses cosmetic hiding for 24 hours; a second click also pauses page filtering and scriptlets. Network blocking stays on. Fixes can be kept or restored from the popup or Settings.
+- **Popup** — shows estimated block counts, filter-update health, and cookie-rejection outcome; removes the numeric trust score and review/share prompts; the button is renamed from "Fix this site".
+- **Phishing scoring** — no longer auto-trusts broad CDN or shared-hosting suffixes; official login hosts remain trusted.
+- **Cookie rejection** — only clicks reject controls inside known consent containers and reports the outcome.
+
+### Added
+- Transactional filter updates with snapshot, rollback, and startup recovery.
+- Permission audit in Settings.
+- Page-fix entries listed under Settings site rules.
+
+### Fixed
+- **CNAME rule id 30000** — startup and install could add the same dynamic rule twice (`Rule with id 30000 does not have a unique ID`). CNAME sync is now serialized and replaces those IDs in the same update.
+- **Firefox block counts** — treat `NS_ERROR_ABORT` as a blocked request again so the toolbar badge does not undercount.
+
 ## [4.7.0] — 2026-10-02
 
 ### Fixed

@@ -5,7 +5,7 @@
 }
 
 body {
-  width: 320px;
+  width: min(320px, 100vw);
   font-family: "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
   color: #1f2328;
@@ -544,4 +544,20 @@ footer {
 
 #learned {
   color: #9334e6;
+}
+
+[hidden] { display: none !important; }
+
+button:focus-visible, a:focus-visible, select:focus-visible,
+input:focus-visible, summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.tracker-list .empty, .tracker-count { color: #4b5563; }
+
+footer { flex-wrap: wrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shield-btn { transition: none; }
 }

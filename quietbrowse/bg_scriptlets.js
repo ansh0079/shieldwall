@@ -4,6 +4,7 @@ async function syncScriptlets() {
   const data = await chrome.storage.local.get({
     enabled: true,
     siteModes: {},
+    siteContentExceptions: {},
     antiAdblock: false,
     scriptletCatalog: true
   });
@@ -19,8 +20,12 @@ async function syncScriptlets() {
 
   const excludeMatches = Object.entries(data.siteModes || {})
     .filter(([, mode]) => mode === SITE_MODE.OFF || mode === SITE_MODE.ADS)
-    .flatMap(([domain]) => [`*://${domain}/*`, `*://*.${domain}/*`])
-    .slice(0, 100);
+    .map(([domain]) => domain);
+  const exclusions = [...new Set([
+    ...excludeMatches,
+    ...Object.keys(data.siteContentExceptions).filter((domain) =>
+      getSiteContentException(domain, { [domain]: data.siteContentExceptions[domain] })?.stage === "page")
+  ])].flatMap((domain) => [`*://${domain}/*`, `*://*.${domain}/*`]).slice(0, 100);
 
   const registrations = [];
 
@@ -30,6 +35,7 @@ async function syncScriptlets() {
       id: "quiet-yt",
       matches: ["*://*.youtube.com/*", "*://*.youtube-nocookie.com/*"],
       js: ["scriptlets.js"],
+      ...(exclusions.length ? { excludeMatches: exclusions } : {}),
       runAt: "document_start",
       world: "MAIN"
     });
@@ -44,7 +50,7 @@ async function syncScriptlets() {
       world: "MAIN",
       allFrames: false
     };
-    if (excludeMatches.length) reg.excludeMatches = excludeMatches;
+    if (exclusions.length) reg.excludeMatches = exclusions;
     registrations.push(reg);
   }
 
@@ -57,7 +63,7 @@ async function syncScriptlets() {
       world: "MAIN",
       allFrames: false
     };
-    if (excludeMatches.length) reg.excludeMatches = excludeMatches;
+    if (exclusions.length) reg.excludeMatches = exclusions;
     registrations.push(reg);
   }
 

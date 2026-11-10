@@ -28,14 +28,10 @@ const PhishScore = (function () {
     "tiktok", "discord", "roblox"
   ];
 
-  const SAFE_SUFFIXES = [
-    "microsoftonline.com", "onmicrosoft.com", "cloud.microsoft",
-    "googleusercontent.com", "googleapis.com",
-    "gstatic.com", "amazonaws.com", "cloudfront.net", "facebook.net",
-    "fbcdn.net", "azurewebsites.net", "windows.net", "apple.news",
-    "googlevideo.com", "ggpht.com", "microsoft.us", "sharepoint.com",
-    "office.net"
-  ];
+  const OFFICIAL_SERVICE_HOSTS = new Set([
+    "login.microsoftonline.com", "outlook.cloud.microsoft",
+    "account.live.com", "accounts.google.com", "appleid.apple.com"
+  ]);
 
   const RISKY_TLDS = new Set([
     "tk", "ml", "ga", "cf", "gq", "zip", "mov", "top", "icu", "rest",
@@ -67,23 +63,8 @@ const PhishScore = (function () {
       return { riskScore: 0, reasons: [], level: "unknown", trustScore: null };
     }
 
-    if (OFFICIAL_DOMAINS.has(base)) {
-      return {
-        riskScore: 0,
-        reasons: ["Known trusted site"],
-        level: "excellent",
-        trustScore: 98
-      };
-    }
-
-    if (SAFE_SUFFIXES.some((s) => host === s || host.endsWith("." + s))) {
-      return {
-        riskScore: 0,
-        reasons: ["Trusted service provider"],
-        level: "excellent",
-        trustScore: 95
-      };
-    }
+    const officialHost = OFFICIAL_SERVICE_HOSTS.has(host) ||
+      OFFICIAL_DOMAINS.has(host.replace(/^www\./, ""));
 
     let riskScore = 0;
     const reasons = [];
@@ -104,7 +85,7 @@ const PhishScore = (function () {
       .filter(Boolean);
     const sld = base.split(".")[0];
 
-    for (const token of BRAND_TOKENS) {
+    for (const token of officialHost ? [] : BRAND_TOKENS) {
       if (subLabels.some((l) => l.includes(token)) && !sld.includes(token)) {
         riskScore += 3;
         reasons.push(`Brand name "${token}" hidden in subdomain`);
@@ -112,7 +93,7 @@ const PhishScore = (function () {
       }
     }
 
-    for (const brand of BRAND_NAMES) {
+    for (const brand of officialHost ? [] : BRAND_NAMES) {
       if (sld === brand) continue;
       const dist = levenshtein(sld, brand);
       if (dist > 0 && dist <= (brand.length >= 8 ? 2 : 1)) {
@@ -172,7 +153,7 @@ const PhishScore = (function () {
     let level;
     if (riskScore >= 3) level = "danger";
     else if (riskScore >= 1) level = "caution";
-    else if (protocol === "https:") level = "good";
+    else if (protocol === "https:") level = officialHost ? "excellent" : "good";
     else level = "caution";
 
     if (reasons.length === 0) {

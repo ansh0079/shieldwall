@@ -26,7 +26,7 @@ const FF_XPI = path.join(ROOT, "quietbrowse-firefox.xpi");
 const MIN_ENTRIES = 35;
 const MAX_ENTRIES = 60;
 
-const BANNED_PATH_PREFIXES = ["node_modules/", "_metadata/", "tools/", "assets/"];
+const BANNED_PATH_PREFIXES = ["node_modules/", "_metadata/", "tools/", "assets/", "docs/", ".git/", ".github/", "trustcheck/"];
 
 let pass = true;
 function ok(label) { console.log(`  ✓  ${label}`); }

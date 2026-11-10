@@ -54,7 +54,8 @@ function loadScripts(files) {
   vm.runInContext(
       "if (typeof PhishScore !== 'undefined') globalThis.PhishScore = PhishScore;" +
       "if (typeof SITE_MODE !== 'undefined') globalThis.SITE_MODE = SITE_MODE;" +
-      "if (typeof getBaseDomain !== 'undefined') globalThis.getBaseDomain = getBaseDomain;",
+      "if (typeof getBaseDomain !== 'undefined') globalThis.getBaseDomain = getBaseDomain;" +
+      "if (typeof getSiteContentException !== 'undefined') globalThis.getSiteContentException = getSiteContentException;",
     context
   );
   return context;
@@ -147,20 +148,27 @@ console.log("compact getBaseDomain (no PSL)");
   test("compact fallback uses eTLD+1 for simple hosts", () => {
     assert(ctx.getBaseDomain("a.b.example.com") === "example.com", "simple eTLD+1");
   });
+  test("page fixes expire and use the most specific domain", () => {
+    const now = 1000;
+    const exceptions = {
+      "example.com": { stage: "cosmetics", expiresAt: 2000 },
+      "shop.example.com": { stage: "page", expiresAt: 2000 },
+      "expired.test": { stage: "page", expiresAt: 999 }
+    };
+    assert(ctx.getSiteContentException("www.shop.example.com", exceptions, now).stage === "page", "specific stage");
+    assert(ctx.getSiteContentException("expired.test", exceptions, now) === null, "expired fix");
+  });
 }
 
-console.log("trusted enterprise suffixes");
+console.log("official service hosts and shared hosting");
 {
   const ctx = loadScripts(["psl_data.js", "utils.js", "phish_score.js"]);
   const PhishScore = ctx.PhishScore;
   const trustedHosts = [
     "outlook.cloud.microsoft",
-    "contoso.onmicrosoft.com",
-    "contoso.sharepoint.com",
-    "cdn.office.net",
     "login.microsoftonline.com",
-    "storage.googleapis.com",
-    "lh3.googleusercontent.com"
+    "accounts.google.com",
+    "appleid.apple.com"
   ];
   for (const host of trustedHosts) {
     test("trusted: " + host, () => {
@@ -169,6 +177,17 @@ console.log("trusted enterprise suffixes");
       assert(r.trustScore >= 90, host + " trust score");
     });
   }
+  test("shared hosting receives no automatic trust", () => {
+    for (const host of ["contoso.sharepoint.com", "login-paypal.amazonaws.com", "paypal.azurewebsites.net"]) {
+      assert(PhishScore.analyze(host, "https:", true).level !== "excellent", host);
+    }
+  });
+  test("official host still surfaces insecure forms", () => {
+    const insecure = PhishScore.analyze("accounts.google.com", "http:", true);
+    assert(insecure.level !== "excellent" && insecure.reasons.some(r => r.includes("http")), "insecure login");
+    const external = PhishScore.analyze("accounts.google.com", "https:", true, { externalFormAction: true });
+    assert(external.level === "caution", "cross-site form action");
+  });
 }
 
 console.log("custom rules");
@@ -250,13 +269,32 @@ console.log("filter persistence");
 {
   const store = { cosmeticDomains: ["same.example", "gone.example"] };
   const removed = [];
+  const dnrUpdates = [];
+  const rulesetUpdates = [];
   const ctx = {
-    console, URL, TextDecoder, AbortController, setTimeout, clearTimeout,
+    console, URL, TextDecoder, AbortController, crypto, setTimeout, clearTimeout,
     OPTIONAL_FILTER_LISTS: [], DEFAULT_FILTER_URLS: [],
-    chrome: { storage: { local: {
-      get: async (defaults) => ({ ...defaults, ...store }),
+    EASYLIST_RULESET_ID: "easylist", EASYPRIVACY_RULESET_ID: "privacy",
+    UPDATE_ALLOW_ID_START: 100000, UPDATE_ID_END: 299999,
+    chrome: {
+      declarativeNetRequest: {
+        MAX_NUMBER_OF_DYNAMIC_RULES: 30000,
+        getDynamicRules: async () => dnrUpdates.at(-1)?.addRules || [],
+        updateDynamicRules: async (update) => dnrUpdates.push(update),
+        updateEnabledRulesets: async (update) => rulesetUpdates.push(update)
+      },
+      storage: { local: {
+      get: async (defaults) => {
+        if (Array.isArray(defaults)) {
+          return Object.fromEntries(defaults.map((key) => [key, store[key]]));
+        }
+        return { ...defaults, ...store };
+      },
       set: async (patch) => Object.assign(store, patch),
-      remove: async (keys) => removed.push(...keys)
+      remove: async (keys) => {
+        for (const key of Array.isArray(keys) ? keys : [keys]) delete store[key];
+        removed.push(...(Array.isArray(keys) ? keys : [keys]));
+      }
     } } }
   };
   ctx.globalThis = ctx;
@@ -265,7 +303,9 @@ console.log("filter persistence");
   vm.runInContext(
     "globalThis.seedSiteCosmetics = seedSiteCosmetics;" +
     "globalThis.seedProceduralRules = seedProceduralRules;" +
-    "globalThis.readFilterResponse = readFilterResponse;",
+    "globalThis.readFilterResponse = readFilterResponse;" +
+    "globalThis.applyFilterSnapshot = applyFilterSnapshot;" +
+    "globalThis.reconcilePendingFilterUpdate = reconcilePendingFilterUpdate;",
     ctx
   );
 
@@ -286,6 +326,25 @@ console.log("filter persistence");
     let rejected = false;
     try { await ctx.readFilterResponse(res, 100); } catch { rejected = true; }
     assert(rejected, "oversized response should be rejected");
+  });
+  test("recovers an interrupted filter transaction", async () => {
+    const candidate = {
+      rules: [{ id: 150000, priority: 1, action: { type: "block" }, condition: { urlFilter: "||ads.example^" } }],
+      useUpdatedLists: true,
+      genericSelectors: [".ad"],
+      proceduralRules: [],
+      siteHide: { "example.com": [".ad"] },
+      siteUnhide: {},
+      lastFilterUpdate: 123
+    };
+    store.enabled = true;
+    store.pendingFilterUpdate = { generation: "test-generation", candidate, previous: null };
+    const result = await ctx.reconcilePendingFilterUpdate();
+    assert(result.recovered === true, "transaction should recover");
+    assert(store.pendingFilterUpdate === undefined, "pending transaction should clear");
+    assert(store.lastFilterUpdate === 123 && store.updatedRules.length === 1, "candidate should commit");
+    assert(store["cs_example.com"][0] === ".ad", "cosmetics should commit");
+    assert(rulesetUpdates.some((u) => u.disableRulesetIds), "bundled lists should disable after install");
   });
 }
 

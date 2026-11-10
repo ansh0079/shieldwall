@@ -22,7 +22,15 @@ async function loadCnameMap() {
   return cnameMap;
 }
 
+let cnameSyncQueue = Promise.resolve();
+
 async function syncCnameRules() {
+  const run = cnameSyncQueue.then(syncCnameRulesNow, syncCnameRulesNow);
+  cnameSyncQueue = run.catch(() => {});
+  return run;
+}
+
+async function syncCnameRulesNow() {
   const data = await chrome.storage.local.get({
     enabled: true,
     cnameUncloak: true
@@ -64,8 +72,10 @@ async function syncCnameRules() {
   }
 
   for (let i = 0; i < rules.length; i += 100) {
+    const chunk = rules.slice(i, i + 100);
     await chrome.declarativeNetRequest.updateDynamicRules({
-      addRules: rules.slice(i, i + 100)
+      removeRuleIds: chunk.map((rule) => rule.id),
+      addRules: chunk
     });
   }
 }

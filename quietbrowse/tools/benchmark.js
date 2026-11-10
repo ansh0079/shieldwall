@@ -193,6 +193,9 @@ async function main() {
     for (const r of rules) {
       if (!r || !r.action || r.action.type !== "block") continue;
       const cd = r.condition || {};
+      // A standalone URL probe has no initiating page. Do not treat site-scoped
+      // rules as global blocks; Chrome only applies these for matching initiators.
+      if (Array.isArray(cd.initiatorDomains) && cd.initiatorDomains.length) continue;
       if (Array.isArray(cd.requestDomains)) {
         for (const d of cd.requestDomains) {
           if (h === d || h.endsWith("." + d)) return true;
@@ -231,6 +234,24 @@ async function main() {
   const total = testUrls.length || 1;
   console.log("");
   console.log(`DNR-like simulation on ${total} URLs: before blocked ${beforeBlocked} (${((beforeBlocked/total)*100).toFixed(1)}%), after blocked ${afterBlocked} (${((afterBlocked/total)*100).toFixed(1)}%)`);
+
+  const corpus = readJSON("tools/benchmark_corpus.json");
+  const blockedHits = corpus.blocked.filter((url) => matchBlock(afterRules, url));
+  const allowedHits = corpus.allowed.filter((url) => !matchBlock(afterRules, url));
+  console.log(
+    `Independent corpus: blocked ${blockedHits.length}/${corpus.blocked.length}; ` +
+    `allowed ${allowedHits.length}/${corpus.allowed.length}`
+  );
+  const missedBlocks = corpus.blocked.filter((url) => !blockedHits.includes(url));
+  const unexpectedBlocks = corpus.allowed.filter((url) => !allowedHits.includes(url));
+  if (missedBlocks.length) console.log(`Missed blocks: ${missedBlocks.join(", ")}`);
+  if (unexpectedBlocks.length) console.log(`Unexpected blocks: ${unexpectedBlocks.join(", ")}`);
+  if (process.argv.includes("--gate")) {
+    const minimumBlocked = Math.ceil(corpus.blocked.length * 0.8);
+    if (blockedHits.length < minimumBlocked || allowedHits.length !== corpus.allowed.length) {
+      throw new Error("Independent blocking corpus did not meet the release threshold");
+    }
+  }
 
   console.log("");
   console.log("Cosmetic payload:");
