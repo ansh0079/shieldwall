@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'          # tools/qa_chrome.js needs the global WebSocket (on by default from Node 22)
 
       - name: Run validation
         working-directory: quietbrowse
