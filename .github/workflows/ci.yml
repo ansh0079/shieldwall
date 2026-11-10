@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'          # tools/qa_chrome.js needs the global WebSocket (on by default from Node 22)
 
       - name: Run validation
         working-directory: quietbrowse
@@ -30,22 +30,67 @@ jobs:
         working-directory: quietbrowse
         run: node tools/benchmark.js --gate
 
+      # Branded Google Chrome (137+) ignores --load-extension, so the runner's preinstalled Chrome never loads the
+      # extension. Install Chromium, which still honours the flag, and point the test at it.
+      - name: Install Chromium for the browser test
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
+        run: |
+          npx --yes playwright@1.63.0 install --with-deps chromium
+          CHROME="$(ls -d "$PLAYWRIGHT_BROWSERS_PATH"/chromium-*/chrome-linux*/chrome | head -1)"
+          test -x "$CHROME" && "$CHROME" --version
+          echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+          # Ubuntu 24.04 runners block unprivileged user namespaces via AppArmor, which kills Chromium's sandbox at
+          # start-up ("Chrome did not expose a DevTools port"). Allow them on this throwaway CI VM so the sandbox stays on.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Run browser behavior tests
         working-directory: quietbrowse
         run: node tools/qa_chrome.js
 
   trustcheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10          # a hung test must fail the job, not run for hours
+    strategy:
+      matrix:
+        node: ['18', '20', '22']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ matrix.node }}
+
+      - name: Validate and package the extension
+        working-directory: trustcheck
+        run: npm run package
+
+      - name: Upload the extension zip (download it from the run's Summary page)
+        if: matrix.node == '22'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trustcheck-extension
+          path: trustcheck/dist/*.zip
+          retention-days: 30
 
       - name: Run TrustCheck tests
         working-directory: trustcheck
         run: npm test
+        env:
+          TEST_REQUIRE_ALL: ${{ matrix.node == '22' && '1' || '' }}   # Node 22 must run every file; 18/20 skip the SQLite ones
+
+      - name: Server self-test (crash, load, fuzz, shutdown, backup drill)
+        if: matrix.node == '22'
+        working-directory: trustcheck
+        run: node test/selftest/run.mjs crash concurrency fuzz shutdown backup prodboot
+
+      - name: Evaluation gates (development set + verdict drift)
+        working-directory: trustcheck
+        run: npm run eval:check
+
+      - name: Evaluation gates (held-out set, aggregates only)
+        working-directory: trustcheck
+        run: npm run eval:holdout
 

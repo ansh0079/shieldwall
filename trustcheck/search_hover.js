@@ -66,8 +66,10 @@
     return list;
   }
 
-  const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
-  const WORDS = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk", unverified: "Unverified shop" };
+  const COLORS = { lower: "#16a34a", caution: "#d97706", risky: "#dc2626", dangerous: "#7f1d1d", limited: "#6b7280" };
+  // Verdict words are printed on white, so they use darker AA-contrast variants of the circle colours.
+  const TEXT = { lower: "#15803d", caution: "#b45309", risky: "#b91c1c", dangerous: "#7f1d1d", limited: "#4b5563" };
+  const WORDS = { lower: "Lower risk indicators", caution: "Caution", risky: "High risk", dangerous: "Dangerous", limited: "Limited evidence" };
   let host, shadow, current = null, showTimer = null, hideTimer = null, token = 0;
 
   function ensure() {
@@ -83,12 +85,12 @@
   function points(r) {
     const pts = [];
     for (const h of r.history || []) pts.push({ s: "info", t: h });
-    if (r.verdict === "unverified") pts.push({ s: "warn", t: "No reviews, buyer reports or domain history found for this shop" });
-    if (r.buyerTotal) pts.push({ s: "info", t: `Based on ${r.buyerTotal} buyer reports (30 days)` });
-    for (const f of r.feedback || []) pts.push({ s: "bad", t: `${f.count} buyers: ${f.label}` });
+    if (r.verdict === "limited") pts.push({ s: "warn", t: "Not enough independent evidence found about this shop to judge it" });
+    if (r.buyerTotal) pts.push({ s: "info", t: `${r.buyerTotal} unverified buyer reports (30 days, not scored)` });
+    for (const f of r.feedback || []) pts.push({ s: "info", t: `${f.count} unverified reports: ${f.label}` });
     if (r.reviews) pts.push({ s: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad", t: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
     for (const th of r.reviews?.themes || []) pts.push({ s: "bad", t: `${th.count} of ${r.reviews.sample} recent reviews: ${th.label}` });
-    for (const sg of r.signals) if ((sg.status !== "info" || ["age", "buyers"].includes(sg.id)) && !(r.history?.length && sg.id === "age" && sg.status !== "bad" && sg.status !== "warn") && !(sg.id === "buyers" && (r.feedback?.length || r.buyerTotal))) pts.push({ s: sg.status, t: sg.label });
+    for (const sg of r.signals) if ((sg.status !== "info" || ["age", "buyers", "sb"].includes(sg.id)) && !(r.history?.length && sg.id === "age" && sg.status !== "bad" && sg.status !== "warn") && !(sg.id === "buyers" && (r.feedback?.length || r.buyerTotal))) pts.push({ s: sg.status, t: sg.label });
     return pts.slice(0, 7);
   }
 
@@ -98,10 +100,10 @@
     st.textContent = `*{box-sizing:border-box;font:13px system-ui,sans-serif}
       .c{width:280px;background:#fff;color:#111827;border-radius:12px;padding:12px;box-shadow:0 6px 24px rgba(0,0,0,.35);border:1px solid #e5e7eb}
       .top{display:flex;gap:10px;align-items:center}.sc{flex:none;width:44px;height:44px;border-radius:50%;color:#fff;font-weight:700;display:grid;place-items:center;background:#6b7280}
-      .v{font-weight:700}.d{color:#6b7280;font-size:11px;word-break:break-all}
-      .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin:10px 0 3px}
+      .v{font-weight:700}.d{color:#4b5563;font-size:11px;word-break:break-all}
+      .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#4b5563;margin:10px 0 3px}
       .p{display:flex;gap:6px;margin:4px 0}.p i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px;background:#9ca3af}
-      .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.n{color:#6b7280;font-size:11px;margin-top:8px}.m{color:#374151;line-height:1.4}`;
+      .good i{background:#15803d}.warn i{background:#b45309}.bad i{background:#b91c1c}.n{color:#4b5563;font-size:11px;margin-top:8px}.m{color:#374151;line-height:1.4}.k{color:#4b5563;font-size:11px}`;
     const c = document.createElement("div"); c.className = "c";
     build(c); shadow.append(st, c);
     host.style.display = "block";
@@ -113,13 +115,13 @@
 
   function render(rect, domain, r) {
     show(rect, (c) => {
-      const top = el("div", "top"), sc = el("div", "sc", r.verdict === "unverified" ? "?" : r.score), tx = el("div");
+      const top = el("div", "top"), sc = el("div", "sc", r.verdict === "limited" ? "?" : r.verdict === "dangerous" ? "!" : r.score), tx = el("div");
       sc.style.background = COLORS[r.verdict];
-      const v = el("div", "v", WORDS[r.verdict]); v.style.color = COLORS[r.verdict];
-      tx.append(v, el("div", "d", domain)); top.append(sc, tx); c.append(top);
+      const v = el("div", "v", r.verdictLabel || WORDS[r.verdict]); v.style.color = TEXT[r.verdict];
+      tx.append(v, el("div", "d", domain), el("div", "k", `${r.confidenceLabel || "Low"} confidence`)); top.append(sc, tx); c.append(top);
       c.append(el("div", "h", "Recent feedback & checks"));
       for (const p of points(r)) { const d = el("div", "p " + p.s); d.append(el("i"), el("span", "", p.t)); c.append(d); }
-      c.append(el("div", "n", "Quick check from the seller's web address. Open the shop for a full check."));
+      c.append(el("div", "n", "Quick check from the seller's web address. Open the shop for a full check. TrustCheck cannot guarantee a seller or a transaction."));
     });
   }
   function note(rect, text) { show(rect, (c) => c.append(el("div", "m", text))); }

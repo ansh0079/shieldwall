@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { historyLines, historySignals, yearsText } from "../lib/history.js";
 import { firstArchived } from "../lib/providers.js";
+import { json, withFetch } from "./helpers.js";
 
 const now = Date.parse("2026-11-09");
 test("history lines show both dates and ages", () => {
@@ -21,11 +22,9 @@ test("old domain, new site => re-use warning", () => {
 test("consistent history => no warning", () => {
   assert.deepEqual(historySignals({ registered: "2019-03-01T00:00:00Z", archived: "2019-08-01T00:00:00Z" }), []);
 });
-test("CDX parsing: earliest snapshot, or null when never archived", async () => {
-  const real = globalThis.fetch;
-  globalThis.fetch = async () => ({ ok: true, json: async () => [["timestamp"], ["20190314123456"]] });
-  assert.equal(await firstArchived("a.com"), "2019-03-14T00:00:00Z");
-  globalThis.fetch = async () => ({ ok: true, json: async () => [] });
-  assert.equal(await firstArchived("b.com"), null);
-  globalThis.fetch = real;
+test("CDX parsing: earliest snapshot, null when never archived, rejects junk", async () => {
+  await withFetch(async () => json([["timestamp"], ["20190314123456"]]), async () => assert.equal(await firstArchived("a.com"), "2019-03-14T00:00:00Z"));
+  await withFetch(async () => json([]), async () => assert.equal(await firstArchived("b.com"), null));
+  await withFetch(async () => json([["timestamp"], ["garbage"]]), async () => await assert.rejects(firstArchived("c.com"), /unexpected/));
+  await withFetch(async () => json({ not: "rows" }), async () => await assert.rejects(firstArchived("d.com"), /unexpected/));
 });

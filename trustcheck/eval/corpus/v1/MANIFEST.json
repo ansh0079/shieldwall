@@ -1,0 +1,15 @@
+{
+ "version": "v1",
+ "synthetic": true,
+ "files": {
+  "dev": {
+   "cases": 52,
+   "sha256": "24b6866dc40c194df735b77714ca8916235e550bec2dbf4a483b7356dfbe5489"
+  },
+  "holdout": {
+   "cases": 26,
+   "sha256": "72d931e8ca730f9735d14f73dea8f813831e279d20aa8bcb0d3609ed6807894e"
+  }
+ },
+ "note": "All cases are synthetic evidence profiles with fixture or reserved names. No real site is labelled fraudulent. See eval/README.md."
+}

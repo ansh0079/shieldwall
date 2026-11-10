@@ -1,4 +1,7 @@
 node_modules
 test
+eval
 *.png
-data.json
+*.db
+*.db-wal
+*.db-shm

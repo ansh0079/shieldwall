@@ -1,0 +1,27 @@
+{
+ "_note": "Regression guards set at the performance measured on corpus v1 (synthetic). They stop silent regressions; they are NOT claims that the performance is adequate. Priors used for ECE are placeholders until real labelled data exists.",
+ "dev": {
+  "minRecallAlarm": 0.65,
+  "minRecallWarn": 0.85,
+  "maxFprAlarm": 0,
+  "maxFprWarn": 0.08,
+  "minPrecisionAlarm": 0.95,
+  "maxFalseReassurance": 0,
+  "maxGapFalseReassurance": 0,
+  "maxLegitDangerous": 0,
+  "requireMonotoneCalibration": true,
+  "maxEce": 0.25
+ },
+ "holdout": {
+  "minRecallAlarm": 0.65,
+  "minRecallWarn": 0.9,
+  "maxFprAlarm": 0,
+  "maxFprWarn": 0.15,
+  "minPrecisionAlarm": 0.95,
+  "maxFalseReassurance": 0,
+  "maxGapFalseReassurance": 0,
+  "maxLegitDangerous": 0,
+  "requireMonotoneCalibration": true,
+  "maxEce": 0.3
+ }
+}
