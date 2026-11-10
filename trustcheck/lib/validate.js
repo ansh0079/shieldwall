@@ -62,6 +62,19 @@ export function validateCompany(p) {
   return { company_name: p.company_name, company_status: p.company_status, date_of_creation: p.date_of_creation };
 }
 
+// Backend URL the user types in Options: HTTPS only, except localhost for development.
+// Returns null when acceptable, otherwise a message to show the user.
+export function backendUrlError(input) {
+  if (!input) return null;                                        // empty = reports off
+  let u;
+  try { u = new URL(input); } catch { return "Not a valid URL (include https://)"; }
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname);
+  if (u.protocol === "http:" && local) return null;
+  if (u.protocol !== "https:") return "The report server must use https:// (reports would otherwise travel unencrypted). Plain http is allowed only for localhost.";
+  if (u.username || u.password) return "Remove the credentials from the URL";
+  return null;
+}
+
 export function validateBuyerSummary(s) {
   if (!isObj(s) || typeof s.domain !== "string" || !isInt(s.total)) bad("buyer-report summary");
   const out = { domain: s.domain, total: s.total, hidden: !!s.hidden, windowDays: isInt(s.windowDays) ? s.windowDays : 30, disputed: s.disputed === true };

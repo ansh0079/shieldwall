@@ -46,6 +46,8 @@
 
   // ---------- live badge: auto drop-down, hover for feedback points ----------
   const COLORS = { lower: "#16a34a", caution: "#d97706", risky: "#dc2626", dangerous: "#7f1d1d", limited: "#6b7280" };
+  // Text on white needs more contrast than a filled circle: darker variants that pass WCAG AA at small sizes.
+  const TEXT = { lower: "#15803d", caution: "#b45309", risky: "#b91c1c", dangerous: "#7f1d1d", limited: "#4b5563" };
   const WORDS = { lower: "Lower risk indicators", caution: "Caution", risky: "High risk", dangerous: "Dangerous", limited: "Limited evidence" };
   const severe = (v) => v === "risky" || v === "dangerous";          // the only verdicts allowed to interrupt a checkout
   const DISCLAIMER = "TrustCheck cannot guarantee a seller or a transaction.";
@@ -78,6 +80,7 @@
 
   function render(r) {
     if (r.neutral) { host?.remove(); return; }   // search pages: no rating to show
+    if (r.ui?.mode === "off" || r.ui?.hidden) { host?.remove(); return; }   // toolbar-only mode / muted site (the toolbar icon still shows the score)
     if (hidden) return;
     // Skip identical re-sends: rebuilding the badge would close a panel the user is hovering.
     const key = JSON.stringify([r.score, r.verdict, r.feedback, r.reviews, r.buyerTotal, r.signals.map((x) => x.label)]);
@@ -94,14 +97,18 @@
         border-top:4px solid ${color};transform:translateY(-100%);transition:transform .35s ease;overflow:hidden}
       .drop.in{transform:translateY(0)}
       .bar{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:default}
+      .bar:focus-visible{outline:2px solid #2563eb;outline-offset:-2px;border-radius:4px}
       .score{flex:none;width:38px;height:38px;border-radius:50%;background:${color};color:#fff;font-weight:700;display:grid;place-items:center}
-      .v{font-weight:700;color:${color}}.sub{color:#6b7280;font-size:11px}
-      .x{margin-left:auto;border:0;background:none;color:#6b7280;font-size:16px;cursor:pointer}
+      .v{font-weight:700;color:${TEXT[r.verdict]}}.sub{color:#4b5563;font-size:11px}
+      .x{margin-left:auto;border:0;background:none;color:#4b5563;font-size:16px;cursor:pointer}
+      .x:focus-visible{outline:2px solid #2563eb;border-radius:4px}
       .more{max-height:0;overflow:hidden;transition:max-height .25s ease;padding:0 12px}
-      .drop.open .more{max-height:260px;padding:2px 12px 10px}
-      .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin:6px 0 2px}
+      .drop.open .more{max-height:290px;padding:2px 12px 10px}
+      .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#4b5563;margin:6px 0 2px}
       .p{margin:4px 0;display:flex;gap:6px}.p i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px}
-      .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.info i{background:#9ca3af}`;
+      .good i{background:#15803d}.warn i{background:#b45309}.bad i{background:#b91c1c}.info i{background:#6b7280}
+      .mute{margin-top:8px;border:0;background:none;color:#4b5563;text-decoration:underline;cursor:pointer;padding:0;font-size:11px}
+      @media (prefers-reduced-motion:reduce){.drop,.more{transition:none}}`;
     const drop = document.createElement("div"); drop.className = "drop";
     const bar = document.createElement("div"); bar.className = "bar";
     const sc = document.createElement("div"); sc.className = "score"; sc.textContent = r.verdict === "limited" ? "?" : r.verdict === "dangerous" ? "!" : r.score; sc.setAttribute("aria-label", `Evidence score ${r.score} of 100`);
@@ -110,8 +117,15 @@
     const sub = document.createElement("div"); sub.className = "sub"; sub.textContent = `${r.confidenceLabel || "Low"} confidence · hover for details`;
     tx.append(v, sub);
     const x = document.createElement("button"); x.className = "x"; x.textContent = "\u00d7"; x.title = "Hide for this page";
-    x.onclick = () => { hidden = true; host.remove(); };
+    x.setAttribute("aria-label", "Hide the TrustCheck badge on this page");
+    x.onclick = (e) => { e.stopPropagation(); hidden = true; host.remove(); };
     bar.append(sc, tx, x);
+    // Keyboard access: the bar is a toggle button for the details panel.
+    bar.tabIndex = 0; bar.setAttribute("role", "button"); bar.setAttribute("aria-expanded", "false");
+    bar.setAttribute("aria-label", `TrustCheck: ${r.verdictLabel || WORDS[r.verdict]}. Press Enter for details`);
+    const setOpen = (on) => { drop.classList.toggle("open", on); bar.setAttribute("aria-expanded", String(on)); };
+    bar.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!drop.classList.contains("open")); } });
+    bar.addEventListener("click", () => setOpen(!drop.classList.contains("open")));
     const more = document.createElement("div"); more.className = "more";
     const h = document.createElement("div"); h.className = "h"; h.textContent = "Most common feedback";
     more.append(h);
@@ -121,23 +135,33 @@
       d.append(i, l); more.append(d);
     }
     const disc = document.createElement("div"); disc.className = "sub"; disc.textContent = DISCLAIMER; disc.style.marginTop = "6px"; more.append(disc);
+    const mute = document.createElement("button"); mute.className = "mute"; mute.textContent = "Don't show this badge on this site for 30 days";
+    mute.onclick = (e) => { e.stopPropagation(); try { chrome.runtime.sendMessage({ type: "hideBadge", domain: r.domain }); } catch { /* extension reloaded */ } hidden = true; host.remove(); };
+    more.append(mute);
     drop.append(bar, more);
     root.append(style, drop);
 
     // Hover on the badge opens the feedback points; the state survives a rebuild.
-    drop.addEventListener("mouseenter", () => { hovering = true; drop.classList.add("open"); });
-    drop.addEventListener("mouseleave", () => { hovering = false; if (!severe(r.verdict)) drop.classList.remove("open"); });
-    if (hovering) drop.classList.add("open");
+    drop.addEventListener("mouseenter", () => { hovering = true; setOpen(true); });
+    drop.addEventListener("mouseleave", () => { hovering = false; if (!severe(r.verdict)) setOpen(false); });
+    if (hovering) setOpen(true);
 
     // Slide in only when first shown; a rebuild appears in place.
     if (fresh) requestAnimationFrame(() => requestAnimationFrame(() => drop.classList.add("in")));
     else { drop.style.transition = "none"; drop.classList.add("in"); }
     // Auto-open on a new page/verdict, then collapse after a few seconds unless risky or hovered.
+    // "quiet" mode: the badge appears but never opens on its own.
     const pageKey = location.href + r.verdict;
     if (pageKey !== shownFor) {
       shownFor = pageKey;
-      drop.classList.add("open");
-      if (!severe(r.verdict)) setTimeout(() => { if (!hovering) root.querySelector(".drop")?.classList.remove("open"); }, 4000);
+      if (r.ui?.mode !== "quiet") {
+        setOpen(true);
+        if (!severe(r.verdict)) setTimeout(() => {   // the badge may have been rebuilt since: act on whatever is live
+          if (hovering) return;
+          const d = root.querySelector(".drop");
+          d?.classList.remove("open"); d?.querySelector(".bar")?.setAttribute("aria-expanded", "false");
+        }, 4000);
+      }
     } else if (!hovering && !severe(r.verdict) && !fresh) {
       /* keep whatever state the user left */
     }
@@ -169,18 +193,19 @@
       *{box-sizing:border-box;font:14px system-ui,sans-serif}
       .bg{position:fixed;inset:0;background:rgba(17,24,39,.82);display:grid;place-items:center;padding:16px}
       .card{max-width:460px;width:100%;background:#fff;color:#111827;border-radius:14px;padding:22px;border-top:6px solid #dc2626;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-      h1{font-size:20px;margin:0 0 4px;color:#dc2626}.sc{color:#6b7280;margin-bottom:12px}
+      h1{font-size:20px;margin:0 0 4px;color:#b91c1c}.sc{color:#4b5563;margin-bottom:12px}
       h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin:14px 0 6px}
       ul{margin:0;padding:0;list-style:none}li{display:flex;gap:8px;margin:5px 0}
       li i{flex:none;width:9px;height:9px;border-radius:50%;margin-top:5px;background:#dc2626}li.warn i{background:#d97706}
       .tips li i{background:#16a34a}
       .row{display:flex;gap:10px;margin-top:18px;align-items:center}
       .go{flex:1;padding:11px;border:0;border-radius:8px;background:#16a34a;color:#fff;font-weight:700;font-size:15px;cursor:pointer}
-      .cont{border:0;background:none;color:#6b7280;text-decoration:underline;cursor:pointer;font-size:12px}
-      a{color:#2563eb}`;
+      .cont{border:0;background:none;color:#4b5563;text-decoration:underline;cursor:pointer;font-size:12px}
+      .go:focus-visible,.cont:focus-visible,a:focus-visible{outline:3px solid #1d4ed8;outline-offset:2px}
+      a{color:#1d4ed8}`;
     const bg = document.createElement("div"); bg.className = "bg";
     const card = document.createElement("div"); card.className = "card";
-    card.setAttribute("role", "alertdialog"); card.setAttribute("aria-label", "TrustCheck warning");
+    card.setAttribute("role", "alertdialog"); card.setAttribute("aria-modal", "true"); card.setAttribute("aria-label", "TrustCheck warning");
     const add = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; card.append(e); return e; };
     add("h1", "", r.verdict === "dangerous" ? "Do not enter payment details here" : "Think twice before paying here");
     add("div", "sc", `${r.domain}: ${r.headline || r.verdictLabel}`);
@@ -211,12 +236,24 @@
     if (link) { const a = document.createElement("a"); a.href = link.url; a.target = "_blank"; a.rel = "noreferrer"; a.textContent = "Check independent reviews"; const p = document.createElement("p"); p.append(a); card.append(p); }
 
     const row = document.createElement("div"); row.className = "row";
+    const prevFocus = document.activeElement;                       // restore the user's place when the dialog closes
+    const close = () => { overlay.remove(); try { prevFocus?.focus?.(); } catch { /* element gone */ } };
     const go = document.createElement("button"); go.className = "go"; go.textContent = "Go back to safety";
-    go.onclick = () => { overlay.remove(); if (history.length > 1) history.back(); else location.href = "https://www.google.com/"; };
+    go.onclick = () => { close(); if (history.length > 1) history.back(); else location.href = "https://www.google.com/"; };
     const cont = document.createElement("button"); cont.className = "cont"; cont.textContent = "I understand the risk, continue";
-    cont.onclick = async () => { try { await chrome.storage.local.set({ [ackKey]: Date.now() }); } catch { /* ignore */ } overlay.remove(); };
+    cont.onclick = async () => { try { await chrome.storage.local.set({ [ackKey]: Date.now() }); } catch { /* ignore */ } close(); };
     row.append(go, cont); card.append(row);
     add("div", "sc", DISCLAIMER);
+
+    // Keep keyboard focus inside the warning: Tab cycles through its controls, never into the risky page beneath.
+    card.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;                                  // Escape deliberately does nothing: closing must be an explicit choice
+      const items = [...card.querySelectorAll("a[href], button")];
+      if (!items.length) return;
+      const i = items.indexOf(sh.activeElement);
+      e.preventDefault();
+      items[(i + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus();
+    });
 
     bg.append(card); sh.append(st, bg);
     document.documentElement.appendChild(overlay);

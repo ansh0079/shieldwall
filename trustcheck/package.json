@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node test/run.mjs",
+    "validate": "node tools/validate_extension.mjs",
+    "package": "node tools/package.mjs",
     "build:psl": "node tools/build_psl.mjs",
     "eval": "node eval/run.mjs",
     "eval:check": "node eval/run.mjs --set dev --check",

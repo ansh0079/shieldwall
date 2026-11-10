@@ -22,7 +22,7 @@ const SOURCE_BY_ID = {
   tenant: "Public Suffix List", policies: "Page scan", urgency: "Page scan", price: "Prices on the results page", buyers: "TrustCheck report server"
 };
 // Setup notices describe configuration, not the shop: shown separately from evidence.
-export const SETUP_IDS = new Set(["co-off", "sb-off", "tp-off"]);
+export const SETUP_IDS = new Set(["co-off", "sb-off", "tp-off", "age-off", "archive-off"]);
 const STRONG_WHEN_BAD = new Set(["lookalike", "ip", "https", "age", "company", "tp"]);
 
 export const familyOf = (s) => s.family || FAMILY_BY_ID[s.id] || (SETUP_IDS.has(s.id) ? "setup" : "other");

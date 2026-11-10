@@ -39,7 +39,7 @@ TrustCheck cannot guarantee a seller or a transaction.
 
 ## Run
 `chrome://extensions` -> Developer mode -> Load unpacked -> select this `trustcheck/` folder.
-Add API keys under Options. Tests: `npm test`.
+Add API keys under Options; every check can be turned off there, and each control says exactly what it sends and where. Tests: `npm test`. Store zip: `npm run package` (validates first).
 
 ## Privacy
 Only the registrable domain (RDAP, Trustpilot) or page URL (Safe Browsing) is sent, and only to those

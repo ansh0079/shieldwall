@@ -8,3 +8,4 @@ quietbrowse*.xpi
 Thumbs.db
 _metadata/
 package-lock.json
+trustcheck/dist/

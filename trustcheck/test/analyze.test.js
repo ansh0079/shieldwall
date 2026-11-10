@@ -122,3 +122,15 @@ test("hover lookups mark the query-stripped Safe Browsing result as partial, so 
   const noQuery = await analyze("https://shop.example/p/2", deps, { hover: true });      // no query to drop: still full evidence
   assert.ok(!noQuery.signals.find((s) => s.id === "sb").partial);
 });
+
+test("privacy toggles: turning RDAP / Archive off skips the lookups and is a setup note, not 'unavailable'", async () => {
+  const { deps, calls } = setup({ settings: { useRdap: false, useArchive: false } });
+  const r = await analyze("https://shop.example/", deps);
+  assert.ok(!calls.some((c) => c[0] === "age" || c[0] === "arch"), "nothing was sent to rdap.org or web.archive.org");
+  assert.ok(r.setup.some((s) => s.id === "age-off"), "popup explains the age check is off");
+  assert.ok(r.setup.some((s) => s.id === "archive-off"));
+  assert.equal((r.missingChecks || []).length, 0, "a user choice is not an outage");
+  const on = setup();                                      // unset = default on (existing users without the new keys)
+  await analyze("https://shop.example/", on.deps);
+  assert.ok(on.calls.some((c) => c[0] === "age") && on.calls.some((c) => c[0] === "arch"));
+});

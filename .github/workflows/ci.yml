@@ -49,6 +49,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - name: Validate and package the extension
+        working-directory: trustcheck
+        run: npm run package
+
       - name: Run TrustCheck tests
         working-directory: trustcheck
         run: npm test

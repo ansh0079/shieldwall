@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateSafeBrowsing, validateTrustpilotDetail, validateTrustpilotUnit, validateCompany, validateBuyerSummary } from "../lib/validate.js";
+import { validateSafeBrowsing, validateTrustpilotDetail, validateTrustpilotUnit, validateCompany, validateBuyerSummary, backendUrlError } from "../lib/validate.js";
 
 const bad = (fn) => assert.throws(fn, /unexpected/);
 test("safe browsing", () => {
@@ -27,4 +27,16 @@ test("buyer summary", () => {
   bad(() => validateBuyerSummary({ ...good, outcomes: { ok: 9, problem: 9, never: 9 } }));   // outcomes exceed total
   bad(() => validateBuyerSummary({ ...good, tags: { "<script>": 1 } }));
   bad(() => validateBuyerSummary({ ...good, total: "5" }));
+});
+
+test("backend URL: https only, except localhost for development", () => {
+  assert.equal(backendUrlError(""), null);
+  assert.equal(backendUrlError("https://reports.example.com"), null);
+  assert.equal(backendUrlError("http://localhost:8787"), null);
+  assert.equal(backendUrlError("http://127.0.0.1:8787"), null);
+  assert.match(backendUrlError("http://reports.example.com"), /https/);
+  assert.match(backendUrlError("http://localhost.evil.example"), /https/);
+  assert.match(backendUrlError("ftp://reports.example.com"), /https/);
+  assert.match(backendUrlError("not a url"), /valid URL/);
+  assert.match(backendUrlError("https://user:pw@reports.example.com"), /credentials/);
 });

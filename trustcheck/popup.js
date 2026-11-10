@@ -56,6 +56,16 @@ function render(r) {
 const ask = (type) => chrome.runtime.sendMessage({ type }).then(render);
 $("recheck").onclick = () => { $("main").hidden = true; $("loading").hidden = false; $("loading").textContent = "Re-checking…"; ask("recheck"); };
 $("opts").onclick = (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); };
+// Feedback loop: a prefilled GitHub issue the user reviews before posting (nothing is sent automatically).
+$("wrong").onclick = (e) => {
+  e.preventDefault();
+  if (!current) return;
+  const title = `Incorrect result: ${current.domain} rated "${current.verdictLabel}"`;
+  const body = [`**Domain:** ${current.domain}`, `**Verdict shown:** ${current.verdictLabel} (score ${current.score}, ${current.confidenceLabel} confidence)`,
+    `**Extension version:** ${chrome.runtime.getManifest().version}`, "", "**What is wrong with this rating?**", "", "",
+    "_Please do not include personal details or order information._"].join("\n");
+  chrome.tabs.create({ url: `https://github.com/ansh0079/shieldwall/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}` });
+};
 ask("get");
 
 // two-step report: one tap for the outcome, optional tags for what went wrong

@@ -8,6 +8,7 @@ import { domainAge, firstArchived, safeBrowsing, trustpilot } from "./lib/provid
 import { fetchCompany } from "./lib/companies.js";
 import { fetchSummary, submitReport, enroll, eraseMyReports } from "./lib/buyers.js";
 import { priceContext } from "./lib/price.js";
+import { DEFAULT_SETTINGS } from "./lib/settings.js";
 
 const providers = { domainAge, firstArchived, safeBrowsing, trustpilot, fetchCompany, fetchSummary };
 const cache = new EvidenceCache(chromeStore(chrome.storage.local, ["ev:", "fail:", "net:", "co:"]));
@@ -19,7 +20,18 @@ const quiet = (p) => Promise.resolve(p).catch(() => {});   // closed tabs reject
 cache.prune().catch(() => {});                     // drop expired + legacy cache entries on service-worker start
 
 async function settings() {
-  return chrome.storage.local.get({ sbKey: "", tpKey: "", backend: "", chKey: "", sbTtlMin: 30 });
+  return chrome.storage.local.get(DEFAULT_SETTINGS);
+}
+const HIDE_MS = 30 * 24 * 3600 * 1000;
+async function badgeUi(domain) {
+  const s = await settings();
+  let hidden = false;
+  if (domain) {
+    const k = "hide:" + domain, at = (await chrome.storage.local.get(k))[k];
+    if (at && Date.now() - at < HIDE_MS) hidden = true;
+    else if (at) await chrome.storage.local.remove(k);            // expired
+  }
+  return { mode: s.badgeMode || "auto", hidden };
 }
 async function priceFor(domain) {
   const pk = "price:" + domain, pc = (await chrome.storage.session.get(pk))[pk];
@@ -51,6 +63,7 @@ async function refresh(tabId, url, force) {
     if (!(e instanceof ProviderError && e.kind === "aborted")) console.warn("TrustCheck: analysis failed:", e?.message);
     return null;
   }
+  if (report && !report.neutral) report.ui = await badgeUi(report.domain);   // on-page badge preferences
   const tab = await chrome.tabs.get(tabId).catch(() => null);
   if (!tab || !guard.isCurrent(token, tab.url)) return null;    // stale: the tab moved on
   await publish(tabId, report);
@@ -82,6 +95,8 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       reply(r ? { ...r, quick: true } : { error: "could not read this seller's address" });
     })().catch((e) => reply({ error: String(e?.message || e).slice(0, 200) }));
     return true;
+  } else if (msg.type === "hideBadge" && sender.tab && typeof msg.domain === "string" && msg.domain.length < 260) {
+    chrome.storage.local.set({ ["hide:" + msg.domain]: Date.now() });   // user asked: no on-page badge on this site for 30 days
   } else if (msg.type === "submitReport") {
     (async () => {
       try {

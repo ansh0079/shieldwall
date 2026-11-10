@@ -39,9 +39,10 @@ export async function analyze(url, deps, opts = {}) {
   const sbTtl = Math.min(24 * 60, Math.max(1, Number(S.sbTtlMin) || TTL.safeBrowsingDefaultMin)) * 60_000;
   const number = scan ? extractCompanyNumber((scan.legal || []).join(" ")) : null;
 
+  const useRdap = S.useRdap !== false, useArchive = S.useArchive !== false;   // default on; Options can turn them off
   const [age, arch, tp, sb, buyer, co] = await Promise.all([
-    tenant ? null : run("age:" + domain, TTL.age, () => P.domainAge(domain, o)),
-    run("arch:" + domain, TTL.archive, () => P.firstArchived(domain, o)),
+    tenant || !useRdap ? null : run("age:" + domain, TTL.age, () => P.domainAge(domain, o)),
+    useArchive ? run("arch:" + domain, TTL.archive, () => P.firstArchived(domain, o)) : null,
     S.tpKey ? run("tp:" + domain, TTL.reviews, () => P.trustpilot(domain, S.tpKey, o)) : null,
     S.sbKey ? run("sb:" + (await sha256Hex(sbUrl)), sbTtl, () => P.safeBrowsing(sbUrl, S.sbKey, o)) : null,   // URL-scoped cache key
     S.backend ? run("buy:" + domain, TTL.buyers, () => P.fetchSummary(S.backend, domain, o)) : null,
@@ -53,10 +54,14 @@ export async function analyze(url, deps, opts = {}) {
   let registered = null;
   if (tenant) sigs.push({ id: "tenant", label: `Hosted on ${tenant}`, status: "info", points: 0, scope: "tenant",
     detail: `This is one site on a shared hosting platform. ${tenant}'s age and reputation do not apply to it.` });
+  else if (!age) sigs.push({ id: "age-off", label: "Domain-age check turned off", status: "info", points: 0,
+    detail: "You turned this off in Options, so nothing was sent to rdap.org and the shop's age is unknown." });
   else if (age.ok) { sigs.push(...stamp(age, age.v)); registered = age.v[0]?.since || null; }
   else sigs.push(...stamp(age, [unavailable("age", "Domain age check", age.e, "domain")]));
-  const archived = arch.ok ? arch.v : null;
-  if (!arch.ok) sigs.push(...stamp(arch, [unavailable("archive", "Internet Archive check", arch.e, tenant ? "tenant" : "domain")]));
+  const archived = arch?.ok ? arch.v : null;
+  if (!arch) sigs.push({ id: "archive-off", label: "Site-history check turned off", status: "info", points: 0,
+    detail: "You turned this off in Options, so nothing was sent to web.archive.org and the site's history is unknown." });
+  else if (!arch.ok) sigs.push(...stamp(arch, [unavailable("archive", "Internet Archive check", arch.e, tenant ? "tenant" : "domain")]));
   else if (archived) sigs.push(...stamp(arch, [{ id: "archive", label: "Site history found in the Internet Archive", status: "info", points: 0, scope: tenant ? "tenant" : "domain", verification: "verified", detail: `First archived snapshot: ${archived.slice(0, 10)}.` }]));
   let reviews = null;
   if (tp) { if (tp.ok) { reviews = tp.v.reviews; sigs.push(...stamp(tp, tp.v.signals)); } else sigs.push(...stamp(tp, [unavailable("tp", "Review-site check", tp.e, "domain")])); }

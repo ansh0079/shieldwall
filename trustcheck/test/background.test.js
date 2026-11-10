@@ -42,3 +42,29 @@ test("closing a tab clears its state", async () => {
   await new Promise((r) => setTimeout(r, 10));
   assert.equal((await chrome.storage.session.get("report:9"))["report:9"], undefined);
 });
+
+test("badge preferences ride on the report: quiet / toolbar-only modes and 30-day site mutes", async () => {
+  const chrome = globalThis.chrome;                        // background.js is already wired to this mock
+  const C = "https://site-c.example/";
+  const report = () => { const r = chrome.sent.filter(([, m]) => m.type === "report").pop(); return r && r[1].report; };
+  const visit = async () => { chrome.L.updated(12, { status: "complete" }, { url: C }); await new Promise((r) => setTimeout(r, 60)); };
+  chrome.tabUrls.set(12, C);
+  await visit();
+  assert.deepEqual(report().ui, { mode: "auto", hidden: false }, "defaults: badge on, auto-open");
+
+  await chrome.storage.local.set({ badgeMode: "quiet" });
+  await visit();
+  assert.equal(report().ui.mode, "quiet");
+
+  // the content script asks to mute the site; the next report says hidden
+  chrome.L.message({ type: "hideBadge", domain: "site-c.example" }, { tab: { id: 12 } }, () => {});
+  await new Promise((r) => setTimeout(r, 20));
+  await visit();
+  assert.equal(report().ui.hidden, true, "muted for 30 days");
+
+  // an expired mute no longer hides and is cleaned up
+  await chrome.storage.local.set({ "hide:site-c.example": Date.now() - 31 * 24 * 3600 * 1000 });
+  await visit();
+  assert.equal(report().ui.hidden, false, "a 30-day mute expires");
+  assert.deepEqual(await chrome.storage.local.get("hide:site-c.example"), {}, "the expired key was removed");
+});
