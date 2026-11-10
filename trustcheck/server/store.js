@@ -25,18 +25,20 @@ export class Store {
   // Raw install IDs are never stored: only a salted HMAC.
   hashInstall(id) { return crypto.createHmac("sha256", this.salt).update(id).digest("hex").slice(0, 32); }
 
-  add({ installId, domain, outcome, tags = [] }) {
+  add({ installId, domain, outcome, tags = [], purchaseId = null }) {
     domain = Store.cleanDomain(domain);
     if (!domain) throw new Error("invalid domain");
     if (!OUTCOMES.includes(outcome)) throw new Error("invalid outcome");
     if (typeof installId !== "string" || installId.length < 8 || installId.length > 64) throw new Error("invalid installId");
+    if (purchaseId !== null && (typeof purchaseId !== "string" || !/^[a-f0-9-]{16,64}$/i.test(purchaseId))) throw new Error("invalid purchaseId");
     if (!Array.isArray(tags) || tags.length > TAGS.length || tags.some((t) => !TAGS.includes(t))) throw new Error("invalid tags");
     const install = this.hashInstall(installId), key = `${domain}|${install}`, t = this.now();
     const recent = [...this.reports.values()].filter((r) => r.install === install && t - r.at < DAY && `${r.domain}|${r.install}` !== key).length;
     if (recent >= this.maxPerInstallPerDay) throw new Error("daily report limit reached");
     if (!this.reports.has(key) && this.reports.size >= this.maxReports) throw new Error("server full");
     // one report per install per domain: a newer one replaces the older
-    this.reports.set(key, { domain, install, outcome, tags: outcome === "ok" ? [] : [...new Set(tags)], at: t });
+    this.reports.set(key, { domain, install, outcome, tags: outcome === "ok" ? [] : [...new Set(tags)],
+      proof: purchaseId ? "purchase_observed" : "self_reported", purchase: purchaseId ? this.hashInstall(purchaseId) : null, at: t });
     this.dirty = true;
   }
   summary(domain) {
@@ -45,9 +47,9 @@ export class Store {
     const since = this.now() - this.windowDays * DAY;
     const rows = [...this.reports.values()].filter((r) => r.domain === domain && r.at >= since);
     if (rows.length < this.minReports) return { domain, total: rows.length, hidden: rows.length > 0, windowDays: this.windowDays };
-    const outcomes = { ok: 0, problem: 0, never: 0 }, tags = {};
-    for (const r of rows) { outcomes[r.outcome]++; for (const t of r.tags) tags[t] = (tags[t] || 0) + 1; }
-    return { domain, total: rows.length, windowDays: this.windowDays, outcomes, tags };
+    const outcomes = { ok: 0, problem: 0, never: 0 }, tags = {}; let purchaseObserved = 0;
+    for (const r of rows) { outcomes[r.outcome]++; if (r.proof === "purchase_observed") purchaseObserved++; for (const t of r.tags) tags[t] = (tags[t] || 0) + 1; }
+    return { domain, total: rows.length, purchaseObserved, windowDays: this.windowDays, outcomes, tags };
   }
   prune() {
     const cutoff = this.now() - this.retentionDays * DAY;

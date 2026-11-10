@@ -1,6 +1,6 @@
 import { registrableDomain, isSearchEngine } from "./lib/domain.js";
 import { urlSignals, pageSignals } from "./lib/heuristics.js";
-import { domainAge, firstArchived, safeBrowsing, trustpilot, reviewLinks } from "./lib/providers.js";
+import { domainAge, firstArchived, safeBrowsing, reviewLinks } from "./lib/providers.js";
 import { historySignals, historyLines } from "./lib/history.js";
 import { priceContext, priceSignals } from "./lib/price.js";
 import { buildReport } from "./lib/score.js";
@@ -8,12 +8,13 @@ import { extractCompanyNumber, fetchCompany, companySignals } from "./lib/compan
 import { fetchSummary, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
 
 const TTL = 6 * 3600 * 1000;
+const NET_CACHE_VERSION = 2; // v2 removes paid Trustpilot API data from cached scoring
 const pageScans = new Map(); // tabId -> scan
 const buyerCache = new Map(); // domain -> {at,sum}
 const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
 
 async function settings() {
-  const s = await chrome.storage.local.get({ sbKey: "", tpKey: "", backend: "", chKey: "" });
+  const s = await chrome.storage.local.get({ sbKey: "", backend: "", chKey: "" });
   return s;
 }
 
@@ -24,28 +25,26 @@ async function analyze(url, tabId, force = false) {
   const domain = registrableDomain(u.hostname);
   if (isSearchEngine(u.hostname)) return { neutral: true, url, domain, verdict: "neutral", signals: [], links: [], feedback: [], checkedAt: Date.now() };
   const cacheKey = "net:" + domain;
-  const { sbKey, tpKey, backend, chKey } = await settings();
+  const { sbKey, backend, chKey } = await settings();
 
   // Network results are per-domain and cached; local/page signals are recomputed.
   let net = (await chrome.storage.local.get(cacheKey))[cacheKey];
-  if (force || !net || Date.now() - net.at > TTL) {
+  if (force || !net || net.version !== NET_CACHE_VERSION || Date.now() - net.at > TTL) {
     const tasks = [domainAge(domain)];
     const archiveTask = firstArchived(domain);
     tasks.push(sbKey ? safeBrowsing(u.origin + "/", sbKey) : Promise.resolve(null));
-    tasks.push(tpKey ? trustpilot(domain, tpKey) : Promise.resolve(null));
-    const [age, sb, tp, arch] = await Promise.allSettled([...tasks, archiveTask]);
+    const [age, sb, arch] = await Promise.allSettled([...tasks, archiveTask]);
     net = {
+      version: NET_CACHE_VERSION,
       at: Date.now(),
       signals: [
         ...(age.status === "fulfilled" ? age.value : [{ id: "age", label: "Domain age unavailable", status: "info", points: 0, detail: "Lookup failed: " + String(age.reason?.message || age.reason).slice(0, 160) }]),
-        ...(sb.value ? sb.value.signals : []),
-        ...(tp.value ? tp.value.signals : [])
+        ...(sb.value ? sb.value.signals : [])
       ],
       registered: age.status === "fulfilled" ? age.value[0]?.since || null : null,
       archived: arch.status === "fulfilled" ? arch.value : null,
       flagged: !!sb.value?.flagged,
-      reviews: tp.value?.reviews || null,
-      errors: [sb, tp].filter((r) => r.status === "rejected").map((r) => String(r.reason))
+      errors: [sb].filter((r) => r.status === "rejected").map((r) => String(r.reason))
     };
     await chrome.storage.local.set({ [cacheKey]: net });
   }
@@ -81,9 +80,10 @@ async function analyze(url, tabId, force = false) {
   const signals = [...priceSigs, ...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...historySignals(net), ...buyerSignals(buyer), ...companySigs];
   if (!chKey) signals.push({ id: "co-off", label: "UK company check not connected", status: "info", points: 0, detail: "Add a free Companies House API key in Options to verify a shop's registered company." });
   if (!sbKey) signals.push({ id: "sb-off", label: "Malware/phishing database not connected", status: "info", points: 0, detail: "Add a free Google Safe Browsing key in Options for stronger protection." });
-  if (!tpKey) signals.push({ id: "tp-off", label: "Review-site scores not connected", status: "info", points: 0, detail: "Add a Trustpilot API key in Options, or use the review links below." });
-  const report = buildReport({ url, domain, signals, reviews: net.reviews, links: reviewLinks(domain), flagged: net.flagged,
+  const report = buildReport({ url, domain, signals, reviews: null, merchantRating: scan?.merchantRating || null, links: reviewLinks(domain), flagged: net.flagged,
     feedback: buyerFeedback(buyer), buyerTotal: buyer && !buyer.hidden ? buyer.total : 0 });
+  const purchase = (await chrome.storage.local.get("purchase:" + domain))["purchase:" + domain];
+  if (purchase && Date.now() - purchase.at < 180 * 86400000) report.purchase = purchase;
   report.backendOn = !!backend;
   report.registered = net.registered || null; report.archived = net.archived || null;
   report.history = historyLines(net);
@@ -112,10 +112,21 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
 });
 chrome.tabs.onRemoved.addListener((id) => { pageScans.delete(id); chrome.storage.session?.remove("report:" + id); });
 
+async function rememberPurchase(tabUrl, scan) {
+  if (!scan.purchaseObserved) return;
+  const domain = registrableDomain(new URL(tabUrl).hostname), key = "purchase:" + domain;
+  const old = (await chrome.storage.local.get(key))[key];
+  if (!old || Date.now() - old.at > 86400000)
+    await chrome.storage.local.set({ [key]: { id: crypto.randomUUID(), at: Date.now(), reported: false } });
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.type === "scan" && sender.tab) {
     pageScans.set(sender.tab.id, msg.scan);
-    refresh(sender.tab.id, sender.tab.url, false);
+    (async () => {
+      try { await rememberPurchase(sender.tab.url, msg.scan); } catch { /* invalid tab URL or storage unavailable */ }
+      await refresh(sender.tab.id, sender.tab.url, false);
+    })();
   } else if (msg.type === "lookup") {
     // Hover lookup from a search page: quick check of one result's domain (no page scan available).
     (async () => {
@@ -135,7 +146,10 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
         if (!backend) return reply({ ok: false, error: "No report server set in Options" });
         let id = installId;
         if (!id) { id = crypto.randomUUID(); await chrome.storage.local.set({ installId: id }); }
-        await submitReport(backend, id, msg.domain, msg.outcome, msg.tags || []);
+        const key = "purchase:" + msg.domain, purchase = (await chrome.storage.local.get(key))[key];
+        const purchaseId = purchase && !purchase.reported && purchase.id === msg.purchaseId ? purchase.id : null;
+        await submitReport(backend, id, msg.domain, msg.outcome, msg.tags || [], purchaseId);
+        if (purchaseId) await chrome.storage.local.set({ [key]: { ...purchase, reported: true } });
         buyerCache.delete(msg.domain);
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab?.url) refresh(tab.id, tab.url, false);

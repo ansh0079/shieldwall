@@ -8,6 +8,7 @@
   console.debug("[TrustCheck] hover script active", window.top === window ? "(top page)" : "(frame)", location.href.slice(0, 80));
 
   const PARAMS = ["url", "q", "adurl", "dest", "dest_url", "u", "ued"];
+  const explicitSellerUrl = globalThis.TrustCheckSearch?.explicitSellerUrl || (() => null);
   // Real destination of a result link, unwrapping the engine's redirect wrappers.
   function destination(a) {
     let u; try { u = new URL(a.href, location.href); } catch { return null; }
@@ -43,6 +44,8 @@
       if (r.width > 560 || r.height > 720) break;                       // too big: a whole grid, not one result
       const links = n.matches("a[href]") ? [n] : [...n.querySelectorAll("a[href]")];
       for (const a of links) { const d = destination(a); if (d) return { card: widen(n, d), url: d }; }
+      const visibleDomain = explicitSellerUrl(n.innerText || n.textContent);
+      if (visibleDomain) return { card: widen(n, visibleDomain), url: visibleDomain };
       if (links.length && !unresolved) unresolved = { card: n, url: null, hrefs: links.slice(0, 5).map((a) => a.href) };
     }
     return unresolved;     // card found, but no seller website could be read from its links
@@ -163,7 +166,7 @@
       const rect = hit.card.getBoundingClientRect();
       if (!hit.url) {
         console.debug("[TrustCheck] could not read a seller website from this result. Links seen:", hit.hrefs);
-        return note(rect, "Google doesn't include the shop's link in this listing. Click it, then hover the seller in the panel on the right to see its rating.");
+        return note(rect, "This listing doesn't expose a seller website. Open it, then hover a seller link to check that shop.");
       }
       let domain; try { domain = new URL(hit.url).hostname.replace(/^www\./, ""); } catch { return; }
       note(rect, `Checking ${domain}...`);

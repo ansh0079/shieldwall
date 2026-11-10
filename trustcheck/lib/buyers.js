@@ -22,10 +22,10 @@ export async function fetchSummary(base, domain) {
   return res.json();
 }
 
-export async function submitReport(base, installId, domain, outcome, tags) {
+export async function submitReport(base, installId, domain, outcome, tags, purchaseId = null) {
   const res = await fetch(`${base.replace(/\/$/, "")}/v1/report`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ installId, domain, outcome, tags })
+    body: JSON.stringify({ installId, domain, outcome, tags, purchaseId })
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "HTTP " + res.status);
   return res.json();
@@ -39,7 +39,9 @@ export function buyerSignals(sum) {
   if (sum.hidden) return info(`${sum.total} buyer report(s) - too few to show`, "Reports are shown once several independent buyers agree.");
   const { ok = 0, problem = 0, never = 0 } = sum.outcomes || {};
   const t = sum.total, days = sum.windowDays || 30;
-  const mk = (status, points, label) => [{ id: "buyers", label, status, points, detail: `Based on ${t} buyer reports in the last ${days} days.` }];
+  const observed = sum.purchaseObserved || 0;
+  const proof = observed ? ` ${observed} followed an order confirmation observed by TrustCheck.` : "";
+  const mk = (status, points, label) => [{ id: "buyers", label, status, points, detail: `Based on ${t} buyer reports in the last ${days} days.${proof}` }];
   if (never / t >= 0.4) return mk("bad", -35, `${never} of ${t} buyers say their order never arrived`);
   if ((never + problem) / t >= 0.5) return mk("bad", -20, `${never + problem} of ${t} buyers reported a problem`);
   if (ok / t >= 0.8 && t >= 5) return mk("good", 15, `${ok} of ${t} buyers received their order fine`);

@@ -13,7 +13,6 @@
     "https://rdap.verisign.com/*",
     "https://web.archive.org/*",
     "https://safebrowsing.googleapis.com/*",
-    "https://api.trustpilot.com/*",
     "https://api.company-information.service.gov.uk/*",
     "http://localhost:8787/*"
   ],
@@ -31,6 +30,7 @@
         "https://*/*"
       ],
       "js": [
+        "lib/merchant-rating.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -41,6 +41,7 @@
         "https://*/*"
       ],
       "js": [
+        "lib/search-seller.js",
         "search_hover.js"
       ],
       "run_at": "document_idle",

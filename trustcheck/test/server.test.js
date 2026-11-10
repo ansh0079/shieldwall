@@ -20,6 +20,15 @@ test("one report per install per domain (replace)", () => {
   assert.equal(s.summary("shop.example").total, 1);
   assert.equal(s.summary("shop.example").outcomes.ok, 1);
 });
+test("purchase-observed reports expose provenance without storing the purchase token", () => {
+  const s = new Store({ minReports: 1 });
+  s.add({ ...rep(1, "ok"), purchaseId: "12345678-abcd-4321-abcd-123456789abc" });
+  const sum = s.summary("shop.example");
+  assert.equal(sum.purchaseObserved, 1);
+  const stored = [...s.reports.values()][0];
+  assert.equal(stored.proof, "purchase_observed");
+  assert.notEqual(stored.purchase, "12345678-abcd-4321-abcd-123456789abc");
+});
 test("old reports fall out of the window", () => {
   let t = 1e12; const s = new Store({ minReports: 1, now: () => t });
   s.add(rep(1, "never")); t += 31 * 86400000;
@@ -31,6 +40,7 @@ test("validation rejects bad input", () => {
   assert.throws(() => s.add({ ...rep(1, "never"), tags: ["<script>"] }));
   assert.throws(() => s.add({ ...rep(1, "never"), domain: "a b/c" }));
   assert.throws(() => s.add({ ...rep(1, "never"), installId: "x" }));
+  assert.throws(() => s.add({ ...rep(1, "never"), purchaseId: "not valid" }));
 });
 test("http round trip + rate limit", async () => {
   const srv = createServer(new Store({ minReports: 1 }), { rateLimit: 3 });

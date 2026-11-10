@@ -16,6 +16,11 @@ function render(r) {
   $("history").textContent = "";
   for (const h of r.history || []) { const d = document.createElement("div"); d.textContent = h; $("history").append(d); }
   $("reviews").textContent = "";
+  if (r.merchantRating) {
+    const d = document.createElement("div"); d.className = "claimed";
+    d.textContent = `Merchant-published rating: ${r.merchantRating.value}/${r.merchantRating.best} from ${r.merchantRating.count.toLocaleString()} ratings (not independently verified)`;
+    $("reviews").append(d);
+  }
   if (r.reviews) {
     const a = document.createElement("a");
     a.href = r.reviews.url; a.target = "_blank"; a.rel = "noreferrer";
@@ -27,6 +32,12 @@ function render(r) {
       $("reviews").append(d);
     }
   }
+  const tp = document.createElement("a");
+  tp.href = `https://www.trustpilot.com/review/${encodeURIComponent(r.domain)}`; tp.target = "_blank"; tp.rel = "noreferrer";
+  tp.textContent = `View ${r.domain} on Trustpilot ↗`; tp.className = "trustpilot"; $("reviews").append(tp);
+  $("proof").textContent = r.purchase && !r.purchase.reported
+    ? `TrustCheck observed an order confirmation on ${new Date(r.purchase.at).toLocaleDateString()}. No receipt details were saved.`
+    : "This will be marked as an unverified buyer report.";
   $("signals").textContent = "";
   for (const s of r.signals) {
     const li = document.createElement("li"); li.className = s.status;
@@ -36,7 +47,7 @@ function render(r) {
     li.append(dot, d); $("signals").append(li);
   }
   $("links").textContent = "";
-  for (const l of r.links) {
+  for (const l of r.links.filter((x) => x.name !== "Trustpilot")) {
     const a = document.createElement("a"); a.href = l.url; a.target = "_blank"; a.rel = "noreferrer"; a.textContent = l.name;
     $("links").append(a);
   }
@@ -61,7 +72,7 @@ for (const b of document.querySelectorAll("#rs1 button")) b.onclick = () => {
 };
 $("send").onclick = send;
 async function send() {
-  const res = await chrome.runtime.sendMessage({ type: "submitReport", domain: current.domain, outcome, tags: [...picked] });
+  const res = await chrome.runtime.sendMessage({ type: "submitReport", domain: current.domain, outcome, tags: [...picked], purchaseId: current.purchase?.id || null });
   $("rs1").hidden = true; $("rs2").hidden = true; $("rmsg").hidden = false;
   $("rmsg").textContent = res?.ok ? "Thanks - your report helps other shoppers." : "Could not send: " + (res?.error || "unknown error");
 }
