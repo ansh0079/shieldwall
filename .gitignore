@@ -3,6 +3,7 @@ quietbrowse/tools/ext_cache/
 compare_report.html
 quietbrowse*.zip
 quietbrowse*.xpi
+trustcheck/dist/
 *.log
 .DS_Store
 Thumbs.db

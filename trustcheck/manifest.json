@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TrustCheck - Safe Shopping Advisor",
-  "version": "0.1.0",
-  "description": "Real-time trust score, seller reviews and scam warnings for any online store you visit.",
+  "version": "0.2.0",
+  "description": "Real-time risk assessment, seller reviews and scam warnings for online stores.",
   "minimum_chrome_version": "110",
   "permissions": [
     "storage",
@@ -13,6 +13,7 @@
     "https://rdap.verisign.com/*",
     "https://web.archive.org/*",
     "https://safebrowsing.googleapis.com/*",
+    "https://api.trustpilot.com/*",
     "https://api.company-information.service.gov.uk/*",
     "http://localhost:8787/*"
   ],
@@ -30,18 +31,34 @@
         "https://*/*"
       ],
       "js": [
-        "lib/merchant-rating.js",
         "content.js"
       ],
       "run_at": "document_idle"
     },
     {
       "matches": [
-        "http://*/*",
-        "https://*/*"
+        "*://*.google.com/*",
+        "*://*.google.co.uk/*",
+        "*://*.google.ca/*",
+        "*://*.google.com.au/*",
+        "*://*.google.de/*",
+        "*://*.google.fr/*",
+        "*://*.google.co.jp/*",
+        "*://*.google.it/*",
+        "*://*.google.es/*",
+        "*://*.google.nl/*",
+        "*://*.bing.com/*",
+        "*://duckduckgo.com/*",
+        "*://*.yahoo.com/*",
+        "*://*.ecosia.org/*",
+        "*://*.startpage.com/*",
+        "*://search.brave.com/*",
+        "*://*.yandex.com/*",
+        "*://*.yandex.ru/*",
+        "*://*.baidu.com/*",
+        "*://*.qwant.com/*"
       ],
       "js": [
-        "lib/search-seller.js",
         "search_hover.js"
       ],
       "run_at": "document_idle",

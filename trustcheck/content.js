@@ -22,10 +22,45 @@
     const confirmationUrl = /\/(order-confirmation|order-complete|order-success|thank-you|purchase-success)(\/|$|\?)/i.test(location.pathname);
     const purchaseObserved = confirmationText && (confirmationUrl || /order\s*(number|no\.?|#)|confirmation\s*(number|no\.?|#)/i.test(text));
     const merchantRating = parseMerchantRating([...document.querySelectorAll('script[type="application/ld+json"]')].map((n) => n.textContent || ""));
+
+    // Known legitimate external payment processors
+    const TRUSTED_PAY_GATEWAYS = /(^|\.)(stripe\.com|paypal\.com|braintreegateway\.com|shopify\.com|myshopify\.com|adyen\.com|worldpay\.com|klarna\.com|squareup\.com|checkout\.com|authorizenet\.com|payu\.com|clearpay\.co\.uk|afterpay\.com)$/i;
+    let hasInsecurePaymentAction = false, insecureActionHost = "";
+    const payForms = [...document.querySelectorAll('form')].filter((f) =>
+      f.querySelector('input[autocomplete^="cc-"], input[name*="card" i], input[name*="cvv" i], input[name*="cvc" i]')
+    );
+    for (const f of payForms) {
+      const act = f.getAttribute("action");
+      if (act && /^https?:\/\//i.test(act)) {
+        try {
+          const actUrl = new URL(act, location.href);
+          if (actUrl.hostname !== location.hostname && !TRUSTED_PAY_GATEWAYS.test(actUrl.hostname)) {
+            hasInsecurePaymentAction = true;
+            insecureActionHost = actUrl.hostname;
+            break;
+          }
+        } catch { /* invalid url */ }
+      }
+    }
+
+    const FREE_EMAIL_PROVIDERS = /(^|\.)(gmail|yahoo|hotmail|outlook|aol|mail|protonmail|proton|zoho|icloud|yandex|gmx)\.(com|me|org|net|co\.uk)$/i;
+    const mailtoLinks = [...document.querySelectorAll('a[href^="mailto:"]')].map((a) => {
+      const m = /mailto:([^?&]+)/i.exec(a.getAttribute("href") || "");
+      return m ? m[1].trim().toLowerCase() : "";
+    }).filter(Boolean);
+    const hasFreeWebmailContact = mailtoLinks.some((email) => {
+      const d = email.split("@")[1];
+      return d && FREE_EMAIL_PROVIDERS.test(d);
+    });
+
+    const isLiquidationClaim = /(closing down sale|store closing down|warehouse liquidation|all stock must go|everything must go|liquidation sale|bankruptcy sale|closing down forever)/i.test(text);
+
     // Legal footer lines (company number etc.), sent so the background can verify the company.
     const legal = (document.body?.innerText || "").split(/\n/).filter((l) => l.length < 240 && /(company|registered|registration|reg\.?)\s*(no|number|#)/i.test(l)).slice(0, 4);
     return {
       isShop, hasPaymentFields, isCheckout, purchaseObserved, merchantRating, legal, title: (document.title || "").slice(0, 120),
+      hasInsecurePaymentAction, insecureActionHost,
+      hasFreeWebmailContact, isLiquidationClaim,
       hasContact: has(/contact/) || !!document.querySelector('a[href^="mailto:"], a[href^="tel:"]'),
       hasReturns: has(/return|refund|shipping/),
       hasPrivacyTerms: has(/privacy|terms/),
@@ -51,7 +86,7 @@
 
   // ---------- live badge: auto drop-down, hover for feedback points ----------
   const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
-  const WORDS = { trusted: "Looks trustworthy", caution: "Proceed with caution", risky: "High risk", unverified: "Unverified shop" };
+  const WORDS = { trusted: "Lower risk indicators", caution: "Proceed with caution", risky: "High risk", unverified: "Unverified shop" };
   let host, root, hidden = false, shownFor = "", lastKey = "", hovering = false;
 
   function ensureHost() {

@@ -1,14 +1,30 @@
-// Hostname helpers. Heuristic registrable-domain extraction (no full PSL).
+// Hostname helpers. High-precision registrable-domain extraction with Public Suffix List support.
+import { PUBLIC_SUFFIX_SET } from "./psl_data.js";
+
 const SECOND_LEVEL = new Set(["co", "com", "org", "net", "gov", "edu", "ac", "ne", "or"]);
 
 export function registrableDomain(hostname) {
   const h = hostname.toLowerCase().replace(/\.$/, "");
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(":")) return h;
   const p = h.split(".");
-  if (p.length <= 2) return h;
+  if (p.length <= 1) return h;
+
+  // Check known multi-level public/private suffixes from longest (3 labels down to 2)
+  const maxCheck = Math.min(p.length - 1, 3);
+  for (let k = maxCheck; k >= 2; k--) {
+    const candidateSuffix = p.slice(-k).join(".");
+    if (PUBLIC_SUFFIX_SET.has(candidateSuffix)) {
+      return p.slice(-(k + 1)).join(".");
+    }
+  }
+
+  // Fallback for standard ccTLD two-level domains (e.g. .co.xx)
   const tld = p[p.length - 1];
   const sld = p[p.length - 2];
-  if (tld.length === 2 && SECOND_LEVEL.has(sld)) return p.slice(-3).join(".");
+  if (p.length >= 3 && tld.length === 2 && SECOND_LEVEL.has(sld)) {
+    return p.slice(-3).join(".");
+  }
+
   return p.slice(-2).join(".");
 }
 
