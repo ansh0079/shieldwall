@@ -101,7 +101,13 @@
   // Feedback points: buyer-report tags when available (r.feedback), then review-site score, then key findings.
   function feedbackPoints(r) {
     const pts = [];
-    for (const h of r.history || []) pts.push({ status: "info", text: h });
+    const ageSig = (r.signals || []).find((s) => s.id === "age");
+    const hasReuse = (r.signals || []).some((s) => s.id === "reuse");
+    const histStatus = hasReuse ? "info" : (ageSig?.status || "info");
+    for (const h of r.history || []) {
+      const st = hasReuse && h.startsWith("First seen") ? "warn" : histStatus;
+      pts.push({ status: st, text: h });
+    }
     if (r.verdict === "unverified") pts.push({ status: "warn", text: "No reviews, buyer reports or domain history found for this shop" });
     if (r.buyerTotal) pts.push({ status: "info", text: `Based on ${r.buyerTotal} buyer reports (30 days)` });
     if (r.merchantRating) pts.push({ status: "info", text: `Merchant claims ${r.merchantRating.value}/${r.merchantRating.best} from ${r.merchantRating.count.toLocaleString()} ratings` });
@@ -112,6 +118,9 @@
     // Also show "missing evidence" lines, so a caution score is never explained by green items alone.
     const KEEP = new Set(["age", "buyers", "company"]);
     for (const sg of r.signals) if ((sg.status !== "info" || KEEP.has(sg.id)) && !(r.history?.length && sg.id === "age" && (sg.status === "info" || sg.status === "good"))) pts.push({ status: sg.status, text: sg.label });
+    if (r.verdict === "caution" && !pts.some((p) => p.status === "warn" || p.status === "bad")) {
+      pts.push({ status: "warn", text: "Limited independent review or company records verified" });
+    }
     return pts.slice(0, 8);
   }
 
@@ -152,7 +161,8 @@
     x.onclick = () => { hidden = true; host.remove(); };
     bar.append(sc, tx, x);
     const more = document.createElement("div"); more.className = "more";
-    const h = document.createElement("div"); h.className = "h"; h.textContent = "Most common feedback";
+    const hasFeedback = (r.feedback && r.feedback.length > 0) || !!r.reviews || !!r.buyerTotal;
+    const h = document.createElement("div"); h.className = "h"; h.textContent = hasFeedback ? "Most common feedback" : "Key trust checks";
     more.append(h);
     for (const pt of feedbackPoints(r)) {
       const d = document.createElement("div"); d.className = "p " + pt.status;

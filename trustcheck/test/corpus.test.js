@@ -153,3 +153,18 @@ test("corpus: native SQLite store persists and reads reports", () => {
   assert.equal(ver.token, "test-token-123");
   assert.equal(store.summary("sqlite-shop.example").verifiedMerchant, true);
 });
+
+test("corpus: established 30-year-old domain with HTTPS scores trusted (not capped at 69 caution)", () => {
+  const sigs = [
+    ...urlSignals("https://footy.com/products/asics-gel-kayano-31"),
+    { id: "age", label: "Established domain (30.7 years)", status: "good", points: 20 }
+  ];
+  const rep = buildReport({
+    url: "https://footy.com/products/asics-gel-kayano-31",
+    domain: "footy.com",
+    signals: sigs,
+    links: []
+  });
+  assert.equal(rep.score, 75);
+  assert.equal(rep.verdict, "trusted");
+});

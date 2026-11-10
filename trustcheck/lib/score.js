@@ -59,11 +59,10 @@ export function buildReport({
 
   let verdict = score >= 70 ? "trusted" : score >= 40 ? "caution" : "risky";
 
-  // A store cannot achieve "trusted" with evidence from less than 2 families unless it is a verified major retailer
-  const isKnown = signals.some((x) => x.id === "known" && x.status === "good");
-  if (verdict === "trusted" && evidence < 2 && !isKnown) {
-    verdict = "caution";
-    score = Math.min(score, 69);
+  // A store cannot achieve "trusted" if it has any "bad" signal or zero independent evidence
+  if (verdict === "trusted" && (evidence === 0 || bads.length > 0)) {
+    verdict = evidence === 0 ? "unverified" : "caution";
+    if (bads.length > 0) score = Math.min(score, 69);
   }
 
   // Middling score with nothing known about the shop is not "caution", it is "unverified".
