@@ -559,6 +559,10 @@
     "message": "Off",
     "description": "Trust score numeric display when protection is off."
   },
+  "trustHeuristic": {
+    "message": "This score is a heuristic, not a guarantee.",
+    "description": "Shown under the site trust score in the popup."
+  },
   "shieldBtnOn": {
     "message": "Protection is ON — click to disable",
     "description": "Tooltip."

@@ -127,16 +127,56 @@ console.log("PhishScore");
     assert(r.level === "danger" || r.level === "caution", "expected caution/danger");
     assert(r.riskScore > 0, "risk should be positive");
   });
-  test("enrich lowers score when protection off", () => {
+  test("enrich reports protection off without a site score", () => {
     const base = PhishScore.analyze("example.com", "https:", false);
     const enriched = PhishScore.enrich(base, {
       enabled: false,
-      siteMode: "full",
-      blockedCount: 0,
-      trackerCount: 0
+      siteMode: "off",
+      blockedCount: 3,
+      trackerCount: 1
     });
-    assert(enriched.level === "off" || enriched.trustScore == null || enriched.level, "enrich runs");
+    assert(enriched.level === "off", "expected off, got " + enriched.level);
+    assert(enriched.trustScore == null, "score hidden when protection is off");
+    assert(enriched.activityNote === "Protection is off", "activity note");
   });
+  test("enrich keeps the site score when many trackers are blocked", () => {
+    const base = PhishScore.analyze("example.com", "https:", false);
+    const enriched = PhishScore.enrich(base, {
+      enabled: true,
+      siteMode: "full",
+      blockedCount: 40,
+      trackerCount: 12
+    });
+    assert(enriched.trustScore === base.trustScore, "blocker stats must not change the score");
+    assert(enriched.level === base.level, "blocker stats must not change the level");
+    assert(!enriched.reasons.some((r) => /blocked|paused|Ads allowed/.test(r)), "reasons stay site-only");
+    assert(enriched.blockedCount === 40 && enriched.trackerCount === 12, "counts returned beside the score");
+    assert(enriched.activityNote.includes("40") && enriched.activityNote.includes("12"), "activity note");
+  });
+
+  const corpus = [
+    { name: "known brand", host: "www.google.com", protocol: "https:", password: false, level: "excellent", minScore: 90 },
+    { name: "brand country domain", host: "paypal.co.uk", protocol: "https:", password: false, level: "good", absent: "Brand name" },
+    { name: "brand inside a longer label", host: "login-paypal-secure.example", protocol: "https:", password: false, level: "danger", reason: "paypal" },
+    { name: "brand glued to a lure word", host: "loginpaypal.com", protocol: "https:", password: false, level: "danger", reason: "paypal" },
+    { name: "typosquat", host: "paypa1.com", protocol: "https:", password: false, level: "danger", reason: "misspelling" },
+    { name: "raw ip login", host: "1.2.3.4", protocol: "http:", password: true, level: "danger", reason: "IP address" },
+    { name: "risky tld", host: "shop.example.tk", protocol: "https:", password: false, level: "caution", reason: ".tk" },
+    { name: "external login on a real brand", host: "accounts.google.com", protocol: "https:", password: true, signals: { externalFormAction: true }, level: "caution", reason: "different site" },
+    { name: "user content host", host: "lh3.googleusercontent.com", protocol: "https:", password: false, notLevel: "excellent" },
+    { name: "amazonaws host", host: "login-paypal.amazonaws.com", protocol: "https:", password: false, notLevel: "excellent" },
+    { name: "azure host", host: "paypal.azurewebsites.net", protocol: "https:", password: false, notLevel: "excellent" }
+  ];
+  for (const row of corpus) {
+    test("corpus: " + row.name, () => {
+      const r = PhishScore.analyze(row.host, row.protocol, row.password, row.signals);
+      if (row.level) assert(r.level === row.level, row.host + " expected " + row.level + ", got " + r.level + " (" + r.reasons.join("; ") + ")");
+      if (row.notLevel) assert(r.level !== row.notLevel, row.host + " should not be " + row.notLevel);
+      if (row.minScore != null) assert(r.trustScore >= row.minScore, row.host + " score " + r.trustScore);
+      if (row.reason) assert(r.reasons.some((reason) => reason.includes(row.reason)), row.host + " missing reason " + row.reason + " in " + r.reasons.join("; "));
+      if (row.absent) assert(!r.reasons.some((reason) => reason.includes(row.absent)), row.host + " unexpected " + row.absent);
+    });
+  }
 }
 
 console.log("compact getBaseDomain (no PSL)");

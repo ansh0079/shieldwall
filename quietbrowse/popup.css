@@ -65,6 +65,26 @@ header {
 .trust-danger .trust-score { color: #fca5a5; }
 .trust-off .trust-score { color: rgba(255, 255, 255, 0.7); }
 
+.trust-detail {
+  padding: 8px 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trust-reasons {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #1f2328;
+}
+
+.trust-activity,
+.trust-disclaimer {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #57606a;
+}
+
 .shield-btn {
   width: 52px;
   height: 52px;
