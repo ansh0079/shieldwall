@@ -39,6 +39,8 @@ TrustCheck cannot guarantee a seller or a transaction.
 
 ## Run
 `chrome://extensions` -> Developer mode -> Load unpacked -> select this `trustcheck/` folder.
+See **BETA_TESTING.md** to install the beta and what to test.
+
 Add API keys under Options; every check can be turned off there, and each control says exactly what it sends and where. Tests: `npm test`. Store zip: `npm run package` (validates first).
 
 ## Privacy

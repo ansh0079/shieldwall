@@ -53,6 +53,14 @@ jobs:
         working-directory: trustcheck
         run: npm run package
 
+      - name: Upload the extension zip (download it from the run's Summary page)
+        if: matrix.node == '22'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trustcheck-extension
+          path: trustcheck/dist/*.zip
+          retention-days: 30
+
       - name: Run TrustCheck tests
         working-directory: trustcheck
         run: npm test
