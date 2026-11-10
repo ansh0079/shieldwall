@@ -30,6 +30,17 @@ jobs:
         working-directory: quietbrowse
         run: node tools/benchmark.js --gate
 
+      # Branded Google Chrome (137+) ignores --load-extension, so the runner's preinstalled Chrome never loads the
+      # extension. Install Chromium, which still honours the flag, and point the test at it.
+      - name: Install Chromium for the browser test
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
+        run: |
+          npx --yes playwright@1.63.0 install --with-deps chromium
+          CHROME="$(ls -d "$PLAYWRIGHT_BROWSERS_PATH"/chromium-*/chrome-linux*/chrome | head -1)"
+          test -x "$CHROME" && "$CHROME" --version
+          echo "CHROME_PATH=$CHROME" >> "$GITHUB_ENV"
+
       - name: Run browser behavior tests
         working-directory: quietbrowse
         run: node tools/qa_chrome.js
