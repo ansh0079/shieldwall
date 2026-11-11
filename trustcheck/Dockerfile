@@ -1,7 +1,8 @@
 FROM node:22-alpine
-ENV NODE_ENV=production PORT=8787 DATA_FILE=/data/data.json TRUST_PROXY=true
+ENV NODE_ENV=production PORT=8787 DATABASE_FILE=/data/reports.sqlite TRUST_PROXY=true
 WORKDIR /app
-COPY server/store.js server/server.js ./server/
+COPY server/ ./server/
+COPY lib/ ./lib/
 COPY package.json ./
 RUN mkdir /data && chown node:node /data
 USER node

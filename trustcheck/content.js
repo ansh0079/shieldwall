@@ -127,8 +127,8 @@
     if (r.buyerTotal) pts.push({ status: "info", text: `Based on ${r.buyerTotal} buyer reports (30 days)` });
     if (r.merchantRating) pts.push({ status: "info", text: `Merchant claims ${r.merchantRating.value}/${r.merchantRating.best} from ${r.merchantRating.count.toLocaleString()} ratings` });
     for (const f of r.feedback || []) pts.push({ status: "bad", text: `${f.count} buyers: ${f.label}` });
-    if (r.reviews) pts.push({ status: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad",
-      text: `${r.reviews.source} ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
+    if (Number.isFinite(r.reviews?.score) && Number.isFinite(r.reviews?.count)) pts.push({ status: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad",
+      text: `${r.reviews.source} ${r.reviews.score.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
     for (const th of r.reviews?.themes || []) pts.push({ status: "bad", text: `${th.count} of ${r.reviews.sample} recent ${r.reviews.source} reviews: ${th.label}` });
     // Also show "missing evidence" lines, so a caution score is never explained by green items alone.
     const KEEP = new Set(["age", "buyers", "company"]);
@@ -271,11 +271,6 @@
           status: "bad",
           text: `Recent reviews report: ${themes.map((t) => t.label).join(", ")}`
         });
-      } else {
-        pts.push({
-          status: "bad",
-          text: "Recent reviews report orders that never arrived, and at least one extra charge."
-        });
       }
     }
 
@@ -283,13 +278,13 @@
     if (hasNonDelivery) {
       pts.push({
         status: "bad",
-        text: `In the last 6 months, ${r.sixMonthNonDelivery} TrustCheck buyers reported this shop did not deliver.`
+        text: `In the last 6 months, ${r.sixMonthNonDelivery} confirmation-observed reports said this shop did not deliver.`
       });
     }
     if (hasNotMatched) {
       pts.push({
         status: "bad",
-        text: `In the last 6 months, ${r.sixMonthNotMatched} TrustCheck buyers reported items did not match the listing.`
+        text: `In the last 6 months, ${r.sixMonthNotMatched} confirmation-observed reports said items did not match the listing.`
       });
     }
 

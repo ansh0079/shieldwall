@@ -1,10 +1,12 @@
-# REPORT_SALT: long random secret (e.g. `openssl rand -hex 32`). Keep it: changing it resets "one report per install".
+# REPORT_SALT and ADMIN_TOKEN must be long independent random secrets.
 services:
   trustcheck-server:
     build: .
     restart: unless-stopped
     environment:
       REPORT_SALT: ${REPORT_SALT:?set REPORT_SALT}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}
+      CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN}
       MIN_REPORTS: "3"
     volumes: ["trustcheck-data:/data"]
     ports: ["127.0.0.1:8787:8787"]   # expose only to the local reverse proxy (HTTPS)

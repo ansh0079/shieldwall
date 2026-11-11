@@ -31,9 +31,15 @@ export async function fetchCheck(base, domain, { url = "", companyNumber = "" } 
   return res.json();
 }
 
-export async function submitReport(base, installId, domain, outcome, tags, purchaseId = null, extra = {}) {
+export async function registerClient(base) {
+  const res = await fetch(`${base.replace(/\/$/, "")}/v1/register`, { method: "POST" });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
+export async function submitReport(base, installId, token, domain, outcome, tags, purchaseId = null, extra = {}) {
   const res = await fetch(`${base.replace(/\/$/, "")}/v1/report`, {
-    method: "POST", headers: { "content-type": "application/json" },
+    method: "POST", headers: { "content-type": "application/json", "authorization": `Bearer ${token}` },
     body: JSON.stringify({
       installId,
       domain,
@@ -61,9 +67,9 @@ export function buyerSignals(sum) {
   const observed = sum.purchaseObserved || 0;
   const proof = observed ? ` ${observed} followed an order confirmation observed by TrustCheck.` : "";
   const mk = (status, points, label) => [{ id: "buyers", label, status, points, detail: `Based on ${t} buyer reports in the last ${days} days.${proof}` }];
-  if (never / t >= 0.4) return mk("bad", -35, `${never} of ${t} buyers say their order never arrived`);
-  if ((never + problem) / t >= 0.5) return mk("bad", -20, `${never + problem} of ${t} buyers reported a problem`);
-  if (ok / t >= 0.8 && t >= 5) return mk("good", 15, `${ok} of ${t} buyers received their order fine`);
+  if (never / t >= 0.4) return mk("bad", -35, `${never} of ${t} reports say the order never arrived`);
+  if ((never + problem) / t >= 0.5) return mk("bad", -20, `${never + problem} of ${t} reports describe a problem`);
+  if (ok / t >= 0.8 && t >= 5) return mk("good", 15, `${ok} of ${t} reports say the order arrived without a problem`);
   return mk("warn", -5, `Mixed buyer reports (${ok} fine, ${never + problem} problems)`);
 }
 

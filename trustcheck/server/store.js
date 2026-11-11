@@ -13,7 +13,7 @@ const DAY = 86400000;
 const HOUR = 3600000;
 
 export class Store {
-  constructor({ file = null, minReports = 3, windowDays = 30, retentionDays = 90, salt = "dev-salt",
+  constructor({ file = null, minReports = 3, windowDays = 30, retentionDays = 180, salt = "dev-salt",
     maxPerInstallPerDay = 20, maxPerDomainPerHour = 25, maxReports = 500000, now = () => Date.now() } = {}) {
     Object.assign(this, { file, minReports, windowDays, retentionDays, salt, maxPerInstallPerDay, maxPerDomainPerHour, maxReports, now });
     this.reports = new Map(); // `${domain}|${installHash}` -> report
@@ -61,8 +61,8 @@ export class Store {
           );
           CREATE INDEX IF NOT EXISTS idx_order_logs_domain ON order_logs (domain);
         `);
-      } catch {
-        this.useSqlite = false;
+      } catch (error) {
+        throw new Error(`Could not open SQLite database: ${error.message}`);
       }
     }
 
@@ -99,7 +99,9 @@ export class Store {
   verifyCredential(installId, token) {
     if (!installId || !token) return false;
     const expected = crypto.createHmac("sha256", this.salt).update(`cred:${installId}`).digest("hex").slice(0, 32);
-    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+    const supplied = Buffer.from(String(token));
+    const wanted = Buffer.from(expected);
+    return supplied.length === wanted.length && crypto.timingSafeEqual(supplied, wanted);
   }
 
   // Register verified merchant domain
@@ -140,17 +142,18 @@ export class Store {
   }) {
     domain = Store.cleanDomain(domain);
     if (!domain) throw new Error("invalid domain");
+    const shortText = (value, max = 120) => value ? String(value).replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, max) : null;
     const ans = answerDate || new Date(this.now()).toISOString();
     const row = {
       domain,
-      storefrontName: storefrontName || null,
-      receiverName: receiverName || null,
+      storefrontName: shortText(storefrontName),
+      receiverName: shortText(receiverName),
       trustpilotScore: trustpilotScore !== null ? Number(trustpilotScore) : null,
       trustpilotCount: trustpilotCount !== null ? Number(trustpilotCount) : null,
       trustpilotUrl: trustpilotUrl || `https://www.trustpilot.com/review/${domain}`,
       outcome,
-      orderDate: orderDate || null,
-      answerDate: ans
+      orderDate: shortText(orderDate, 40),
+      answerDate: shortText(ans, 40)
     };
     if (this.useSqlite && this.db) {
       const stmt = this.db.prepare(`
@@ -298,6 +301,7 @@ export class Store {
     }
     const activeNonDelivery = sixMonthNonDelivery >= this.minReports ? sixMonthNonDelivery : 0;
     const activeNotMatched = sixMonthNotMatched >= this.minReports ? sixMonthNotMatched : 0;
+    const sixMonthObservedTotal = sixMonthRows.length;
 
     if (rows.length < this.minReports) {
       return {
@@ -309,6 +313,7 @@ export class Store {
         sixMonthNonDelivery: activeNonDelivery,
         sixMonthNotMatched: activeNotMatched,
         sixMonthDelivered,
+        sixMonthObservedTotal,
         minReports: this.minReports
       };
     }
@@ -341,6 +346,7 @@ export class Store {
       sixMonthNonDelivery: activeNonDelivery,
       sixMonthNotMatched: activeNotMatched,
       sixMonthDelivered,
+      sixMonthObservedTotal,
       minReports: this.minReports,
       smoothed: {
         neverRate: Number(smoothedNeverRate.toFixed(3)),

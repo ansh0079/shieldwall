@@ -1,34 +1,33 @@
 // Order follow-up reminders: 14-day post-order delivery checks.
-// Pure client-side logic with zero personal identifiable information.
-import crypto from "node:crypto";
+// Pure client-side logic with no receipt or buyer identity stored.
 
 export const DAY = 86400000;
 
-export function hashOrderId(orderId, salt = "tc-order-salt") {
+export async function hashOrderId(orderId, salt = "tc-order-salt") {
   if (!orderId || typeof orderId !== "string") return null;
-  return crypto.createHmac("sha256", salt).update(orderId.trim()).digest("hex").slice(0, 32);
+  const bytes = new TextEncoder().encode(`${salt}:${orderId.trim()}`);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 
-export function createReminder({
+export async function createReminder({
   domain,
   amount = null,
   orderId = null,
   orderIdHash = null,
   storefrontName = null,
-  receiverName = null,
   now = Date.now()
 } = {}) {
   if (!domain || typeof domain !== "string") throw new Error("domain is required");
   const cleanDomain = domain.toLowerCase().trim().replace(/^www\./, "");
-  const hash = orderIdHash || (orderId ? hashOrderId(orderId) : crypto.randomUUID().slice(0, 32));
+  const hash = orderIdHash || (orderId ? await hashOrderId(orderId) : globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 32));
 
   return {
-    id: "rem:" + crypto.randomUUID(),
+    id: "rem:" + globalThis.crypto.randomUUID(),
     domain: cleanDomain,
     amount: amount ? String(amount).slice(0, 32) : null,
     orderIdHash: hash,
     storefrontName: storefrontName ? String(storefrontName).slice(0, 80) : null,
-    receiverName: receiverName ? String(receiverName).slice(0, 80) : null,
     createdAt: now,
     remindAt: now + 14 * DAY,
     askCount: 0,
@@ -47,6 +46,7 @@ export function handleReminderAnswer(reminder, answer, { now = Date.now() } = {}
           ...reminder,
           remindAt: now + 7 * DAY,
           askCount: 1,
+          shownAt: null,
           status: "pending"
         },
         report: null
@@ -77,7 +77,6 @@ export function handleReminderAnswer(reminder, answer, { now = Date.now() } = {}
         tags: ["delayed"],
         purchaseId: reminder.orderIdHash,
         storefrontName: reminder.storefrontName,
-        receiverName: reminder.receiverName,
         orderDate: new Date(reminder.createdAt).toISOString(),
         answerDate: new Date(now).toISOString()
       }
@@ -99,7 +98,6 @@ export function handleReminderAnswer(reminder, answer, { now = Date.now() } = {}
         tags: ["not_as_described"],
         purchaseId: reminder.orderIdHash,
         storefrontName: reminder.storefrontName,
-        receiverName: reminder.receiverName,
         orderDate: new Date(reminder.createdAt).toISOString(),
         answerDate: new Date(now).toISOString()
       }
@@ -121,7 +119,6 @@ export function handleReminderAnswer(reminder, answer, { now = Date.now() } = {}
         tags: [],
         purchaseId: reminder.orderIdHash,
         storefrontName: reminder.storefrontName,
-        receiverName: reminder.receiverName,
         orderDate: new Date(reminder.createdAt).toISOString(),
         answerDate: new Date(now).toISOString()
       }

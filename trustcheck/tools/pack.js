@@ -90,7 +90,7 @@ function collectFiles(target = "chrome") {
   const manifestFile = target === "firefox" ? "manifest.firefox.json" : "manifest.json";
   const manifestRaw = fs.readFileSync(path.join(ROOT, manifestFile), "utf8");
   const manifest = JSON.parse(manifestRaw);
-  const version = manifest.version || "0.2.0";
+  const version = manifest.version || "0.3.0";
 
   const fileList = [
     { path: "manifest.json", content: manifestRaw },
@@ -101,7 +101,9 @@ function collectFiles(target = "chrome") {
     { path: "popup.css", content: fs.readFileSync(path.join(ROOT, "popup.css")) },
     { path: "popup.js", content: fs.readFileSync(path.join(ROOT, "popup.js")) },
     { path: "options.html", content: fs.readFileSync(path.join(ROOT, "options.html")) },
-    { path: "options.js", content: fs.readFileSync(path.join(ROOT, "options.js")) }
+    { path: "options.js", content: fs.readFileSync(path.join(ROOT, "options.js")) },
+    { path: "reminder.html", content: fs.readFileSync(path.join(ROOT, "reminder.html")) },
+    { path: "reminder.js", content: fs.readFileSync(path.join(ROOT, "reminder.js")) }
   ];
 
   // Add all files from lib/
@@ -112,6 +114,13 @@ function collectFiles(target = "chrome") {
         path: `lib/${f}`,
         content: fs.readFileSync(path.join(libDir, f))
       });
+    }
+  }
+
+  const iconsDir = path.join(ROOT, "icons");
+  if (fs.existsSync(iconsDir)) {
+    for (const f of fs.readdirSync(iconsDir)) {
+      fileList.push({ path: `icons/${f}`, content: fs.readFileSync(path.join(iconsDir, f)) });
     }
   }
 

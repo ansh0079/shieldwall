@@ -123,6 +123,33 @@ function render(r) {
 
   // Summary card
   $("summaryBox").textContent = r.summary || "Real-time e-commerce trust and safety check.";
+  const checked = r.analysis?.checkedCount ?? 0;
+  const totalChecks = r.analysis?.totalChecks ?? 0;
+  const checkedAt = new Date(r.checkedAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  $("analysisMeta").textContent = totalChecks
+    ? `${checked} of ${totalChecks} evidence areas checked · Updated ${checkedAt}`
+    : `Updated ${checkedAt}`;
+
+  const outcomes = r.outcomeSummary;
+  if (outcomes?.total > 0) {
+    $("outcomes").hidden = false;
+    $("outcomeStats").textContent = "";
+    const items = [
+      ["Delivered", outcomes.delivered, outcomes.deliveredPercent, "good"],
+      ["Not delivered", outcomes.nonDelivery, outcomes.nonDeliveryPercent, "bad"],
+      ["Did not match", outcomes.notMatched, outcomes.notMatchedPercent, "warn"]
+    ];
+    for (const [label, count, percent, status] of items) {
+      const item = document.createElement("div");
+      item.className = `outcome ${status}`;
+      const value = document.createElement("b"); value.textContent = `${percent}%`;
+      const name = document.createElement("span"); name.textContent = `${label} (${count})`;
+      item.append(value, name); $("outcomeStats").append(item);
+    }
+    $("outcomeNote").textContent = `${outcomes.total} outcomes followed an order confirmation observed by TrustCheck. Small samples may be unrepresentative.`;
+  } else {
+    $("outcomes").hidden = true;
+  }
 
   // Visual timeline
   buildTimeline(r);
@@ -140,7 +167,10 @@ function render(r) {
     a.href = r.reviews.url;
     a.target = "_blank";
     a.rel = "noreferrer";
-    a.textContent = `${r.reviews.source}: ${r.reviews.score?.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews`;
+    const hasRating = Number.isFinite(r.reviews.score) && Number.isFinite(r.reviews.count);
+    a.textContent = hasRating
+      ? `${r.reviews.source}: ${r.reviews.score.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews`
+      : `View ${r.domain} on ${r.reviews.source || "Trustpilot"} ↗`;
     $("reviews").append(a);
     for (const th of r.reviews.themes || []) {
       const d = document.createElement("div");
@@ -149,16 +179,18 @@ function render(r) {
     }
   }
 
-  const tp = document.createElement("a");
-  tp.href = `https://www.trustpilot.com/review/${encodeURIComponent(r.domain)}`;
-  tp.target = "_blank";
-  tp.rel = "noreferrer";
-  tp.textContent = `View ${r.domain} on Trustpilot ↗`;
-  tp.className = "trustpilot";
-  $("reviews").append(tp);
+  if (!r.reviews?.url) {
+    const tp = document.createElement("a");
+    tp.href = `https://www.trustpilot.com/review/${encodeURIComponent(r.domain)}`;
+    tp.target = "_blank";
+    tp.rel = "noreferrer";
+    tp.textContent = `View ${r.domain} on Trustpilot ↗`;
+    tp.className = "trustpilot";
+    $("reviews").append(tp);
+  }
 
   $("proof").textContent = r.purchase && !r.purchase.reported
-    ? `TrustCheck observed an order confirmation on ${new Date(r.purchase.at).toLocaleDateString()}. No receipt details were saved.`
+    ? `TrustCheck observed an order confirmation on ${new Date(r.purchase.at).toLocaleDateString()}. The date and optional order amount stay on this device.`
     : "This will be marked as an unverified community report.";
 
   // Key Findings vs Optional Configuration notices
@@ -244,7 +276,7 @@ for (const b of document.querySelectorAll("#rs1 button")) {
 $("send").onclick = send;
 
 async function send() {
-  const purchaseId = current?.purchase && !current.purchase.reported ? current.purchase.token : null;
+  const purchaseId = current?.purchase && !current.purchase.reported ? current.purchase.id : null;
   const res = await chrome.runtime.sendMessage({
     type: "submitReport",
     domain: current.domain,

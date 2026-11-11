@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TrustCheck order update</title>
+  <style>
+    :root{font:16px system-ui,sans-serif;color:#111827;background:#f3f4f6}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;box-sizing:border-box}.card{width:min(460px,100%);background:#fff;border-radius:16px;padding:28px;box-shadow:0 12px 40px #11182722;border-top:6px solid #2563eb}h1{font-size:22px;margin:0 0 8px}p{color:#4b5563;line-height:1.5}.answers{display:grid;gap:10px;margin-top:22px}button{border:0;border-radius:9px;padding:13px 16px;text-align:left;font:600 15px system-ui;cursor:pointer;background:#eff6ff;color:#1d4ed8}button:hover,button:focus{background:#dbeafe;outline:2px solid #60a5fa}.muted{font-size:13px;color:#6b7280;margin-top:18px}#status{font-weight:600;color:#166534}button:disabled{opacity:.55;cursor:default}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>How did your order go?</h1>
+    <p id="shop">Loading order reminder…</p>
+    <div class="answers" id="answers" hidden>
+      <button data-answer="yes_matched">Arrived and matched the listing</button>
+      <button data-answer="yes_unmatched">Arrived but did not match the listing</button>
+      <button data-answer="no">Did not arrive</button>
+      <button data-answer="not_yet">Not yet — remind me once more</button>
+    </div>
+    <p id="status" role="status"></p>
+    <p class="muted">TrustCheck sends the shop domain, outcome, and date. It does not send your identity, address, account, card, or order number.</p>
+  </main>
+  <script src="reminder.js"></script>
+</body>
+</html>

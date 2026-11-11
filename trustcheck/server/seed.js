@@ -4,7 +4,8 @@ const [base = "http://localhost:8787", domain = "localhost"] = process.argv.slic
 const plan = [["never", ["fake_tracking"], 14], ["problem", ["counterfeit", "not_as_described"], 6], ["problem", ["delayed"], 4], ["ok", [], 2]];
 let i = 0;
 for (const [outcome, tags, n] of plan) for (let k = 0; k < n; k++) {
-  await fetch(base + "/v1/report", { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ installId: "demo-install-" + String(i++).padStart(4, "0"), domain, outcome, tags }) });
+  const credential = await (await fetch(base + "/v1/register", { method: "POST" })).json();
+  await fetch(base + "/v1/report", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${credential.token}` },
+    body: JSON.stringify({ installId: credential.installId, domain, outcome, tags }) });
 }
 console.log("seeded", i, "DEMO reports for", domain);

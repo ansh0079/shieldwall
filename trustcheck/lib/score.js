@@ -29,7 +29,10 @@ export function buildReport({
   feedback = [],
   buyerTotal = 0,
   sixMonthNonDelivery = 0,
-  sixMonthNotMatched = 0
+  sixMonthNotMatched = 0,
+  sixMonthDelivered = 0,
+  sixMonthObservedTotal = 0,
+  minReports = 3
 }) {
   signals = [...signals];
 
@@ -41,7 +44,7 @@ export function buildReport({
         label: `Trustpilot rating is ${reviews.score.toFixed(1)}/5 (${reviews.count} reviews)`,
         status: "bad",
         points: -25,
-        detail: "Recent reviews report orders that never arrived, or customer disputes."
+        detail: "Low independent review-site rating. Open the source to read the underlying reviews."
       });
     } else if (reviews.score >= 4.0 && reviews.count >= 10) {
       signals.push({
@@ -54,23 +57,23 @@ export function buildReport({
     }
   }
 
-  // 6-month verified buyer non-delivery signal (Step 3)
+  // 6-month confirmation-observed non-delivery signal (Step 3)
   if (sixMonthNonDelivery >= 2 && !signals.some((s) => s.id === "six-month-nondelivery")) {
     signals.push({
       id: "six-month-nondelivery",
-      label: `In the last 6 months, ${sixMonthNonDelivery} TrustCheck buyers reported this shop did not deliver`,
+      label: `In the last 6 months, ${sixMonthNonDelivery} confirmation-observed reports said this shop did not deliver`,
       status: "bad",
       points: -30,
-      detail: "Verified purchase-observed delivery reports from real buyers."
+      detail: "The extension observed an order confirmation before requesting each outcome."
     });
   }
   if (sixMonthNotMatched >= 2 && !signals.some((s) => s.id === "six-month-notmatched")) {
     signals.push({
       id: "six-month-notmatched",
-      label: `In the last 6 months, ${sixMonthNotMatched} TrustCheck buyers reported items did not match the listing`,
+      label: `In the last 6 months, ${sixMonthNotMatched} confirmation-observed reports said items did not match the listing`,
       status: "bad",
       points: -20,
-      detail: "Verified purchase-observed delivery reports from real buyers."
+      detail: "The extension observed an order confirmation before requesting each outcome."
     });
   }
 
@@ -123,6 +126,23 @@ export function buildReport({
 
   const confidence = evidence >= 3 ? "high" : evidence >= 1 ? "medium" : "low";
 
+  const checkDefinitions = [
+    ["Domain history", ["age", "reuse"]],
+    ["Security threats", ["sb", "https", "lookalike", "ip", "pay-http", "pay-hijack", "punycode"]],
+    ["Seller identity", ["company", "merchant-verified"]],
+    ["Independent reviews", ["tp"]],
+    ["Buyer outcomes", ["buyers", "six-month-nondelivery", "six-month-notmatched"]],
+    ["Site transparency", ["policies", "free-mail", "urgency", "liquidation"]],
+    ["Price context", ["price"]]
+  ];
+  const checks = checkDefinitions.map(([name, ids]) => ({
+    name,
+    status: signals.some((signal) => ids.includes(signal.id)) ? "checked" : "unavailable"
+  }));
+  const checkedCount = checks.filter((check) => check.status === "checked").length;
+  const observedTotal = Math.max(sixMonthObservedTotal, sixMonthDelivered + sixMonthNonDelivery + sixMonthNotMatched);
+  const pct = (value) => observedTotal ? Math.round(value * 100 / observedTotal) : 0;
+
   const order = { bad: 0, warn: 1, info: 2, good: 3 };
   signals = [...signals].sort((a, b) => order[a.status] - order[b.status]);
 
@@ -157,6 +177,25 @@ export function buildReport({
     buyerTotal,
     sixMonthNonDelivery,
     sixMonthNotMatched,
+    sixMonthDelivered,
+    sixMonthObservedTotal: observedTotal,
+    minReports,
+    outcomeSummary: {
+      total: observedTotal,
+      delivered: sixMonthDelivered,
+      nonDelivery: sixMonthNonDelivery,
+      notMatched: sixMonthNotMatched,
+      deliveredPercent: pct(sixMonthDelivered),
+      nonDeliveryPercent: pct(sixMonthNonDelivery),
+      notMatchedPercent: pct(sixMonthNotMatched),
+      windowDays: 180
+    },
+    analysis: {
+      checks,
+      checkedCount,
+      totalChecks: checks.length,
+      materialWarnings: signals.filter((signal) => signal.status === "bad" || signal.status === "warn").length
+    },
     links,
     checkedAt: Date.now()
   };

@@ -30,3 +30,15 @@ test("missing store policies penalised", () => {
   const s = pageSignals({ isShop: true, https: true });
   assert.equal(s[0].id, "policies"); assert.equal(s[0].status, "bad");
 });
+test("analysis reports coverage without inventing review claims", () => {
+  const r = buildReport({
+    url: "https://shop.example",
+    domain: "shop.example",
+    signals: [{ id: "age", label: "Domain is 2 years old", status: "good", points: 10 }],
+    reviews: { source: "Trustpilot", score: 2.4, count: 20, url: "https://www.trustpilot.com/review/shop.example" },
+    links: []
+  });
+  assert.ok(r.analysis.checkedCount >= 2);
+  assert.match(r.signals.find((signal) => signal.id === "tp").detail, /Open the source/);
+  assert.doesNotMatch(r.signals.find((signal) => signal.id === "tp").detail, /never arrived/);
+});

@@ -13,8 +13,11 @@ export async function fetchTrustpilotSummary(domain, apiKey = "") {
     try {
       const buUrl = `https://api.trustpilot.com/v1/business-units/find?name=${encodeURIComponent(clean)}`;
       const bu = await ok(await fetch(buUrl, { headers: { apikey: apiKey }, signal: AbortSignal.timeout(4000) }));
-      const score = Number(bu.trustScore || bu.score || 0);
-      const count = Number(bu.numberOfReviews?.total || bu.numberOfReviews || 0);
+      const rawScore = bu.trustScore?.stars ?? bu.trustScore ?? bu.score;
+      const rawCount = bu.numberOfReviews?.total ?? bu.numberOfReviews;
+      const score = Number(rawScore);
+      const count = Number(rawCount);
+      if (!Number.isFinite(score) || !Number.isFinite(count)) throw new Error("invalid Trustpilot response");
       const id = bu.id;
 
       let themes = [];
@@ -31,61 +34,13 @@ export async function fetchTrustpilotSummary(domain, apiKey = "") {
         source: "Trustpilot",
         score,
         count,
-        sample: count,
+        sample: themes.length ? Math.min(20, count) : 0,
         themes,
         url: defaultUrl
       };
     } catch {
-      // Fall through to public page parsing
+      // Licensed API unavailable: retain only the neutral link below.
     }
-  }
-
-  // 2. Fallback: Parse public review page for aggregate schema markup
-  try {
-    const res = await fetch(defaultUrl, {
-      headers: {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TrustCheck/0.2.0",
-        "accept": "text/html,application/xhtml+xml"
-      },
-      signal: AbortSignal.timeout(4000)
-    });
-    if (res.ok) {
-      const html = await res.text();
-      // Look for JSON-LD schema or data attributes
-      const jsonMatch = html.match(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/i);
-      let score = null, count = null;
-      if (jsonMatch) {
-        try {
-          const data = JSON.parse(jsonMatch[1]);
-          const ar = data.aggregateRating || (Array.isArray(data["@graph"]) && data["@graph"].find((x) => x.aggregateRating)?.aggregateRating);
-          if (ar) {
-            score = Number(ar.ratingValue);
-            count = Number(ar.reviewCount);
-          }
-        } catch { /* parse error */ }
-      }
-
-      // Regex fallback if JSON-LD wasn't present
-      if (score === null) {
-        const ratingMatch = html.match(/data-rating="([0-9.]+)"|headline-headline[^>]*>([0-9.]+)<\/span>/i);
-        const countMatch = html.match(/([0-9,]+)\s+reviews?/i);
-        if (ratingMatch) score = parseFloat(ratingMatch[1] || ratingMatch[2]);
-        if (countMatch) count = parseInt(countMatch[1].replace(/,/g, ""), 10);
-      }
-
-      if (score !== null && !isNaN(score)) {
-        return {
-          source: "Trustpilot",
-          score,
-          count: count || 0,
-          sample: count || 0,
-          themes: [],
-          url: defaultUrl
-        };
-      }
-    }
-  } catch {
-    // Page fetch error
   }
 
   // Always return the direct review link even if score cannot be loaded

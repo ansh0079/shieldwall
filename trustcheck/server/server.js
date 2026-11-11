@@ -28,7 +28,7 @@ export function clientSubnet(ip) {
   return ip;
 }
 
-export function createServer(store, { rateLimit = 20, readLimit = 300, trustProxy = false, corsOrigin = "*", sbKey = "", chKey = "", tpKey = "" } = {}) {
+export function createServer(store, { rateLimit = 20, readLimit = 300, trustProxy = false, corsOrigin = "*", sbKey = "", chKey = "", tpKey = "", adminToken = "", merchantVerification = false } = {}) {
   const hits = new Map(); // `${kind}|${key}` -> timestamps (1h window)
   const serverCache = new Map(); // key -> { at, data }
 
@@ -37,6 +37,11 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
     arr.push(t);
     hits.set(k, arr);
     return arr.length > max;
+  };
+  const csvCell = (value) => {
+    let text = String(value ?? "");
+    if (/^[=+@-]/.test(text)) text = "'" + text;
+    return `"${text.replace(/"/g, '""')}"`;
   };
 
   const sweep = setInterval(() => {
@@ -62,6 +67,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
     const url = new URL(req.url, "http://x");
     const ip = clientIp(req, trustProxy);
     const subnet = clientSubnet(ip);
+    const bearer = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
 
     try {
       if (req.method === "GET" && url.pathname === "/healthz") {
@@ -83,6 +89,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
       }
 
       if (req.method === "POST" && url.pathname === "/v1/merchant/verify") {
+        if (!merchantVerification) return send(404, { error: "not found" });
         if (limited("merchant-ver", ip, 5)) return send(429, { error: "rate limited" });
         let body = "";
         req.on("data", (c) => { body += c; });
@@ -110,9 +117,6 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
               // Direct network fetch failure
             }
 
-            // Also support local dev token verification
-            if (token === `dev-verify-${clean}`) verified = true;
-
             if (verified) {
               const record = store.addMerchantVerification(clean, token, "well-known");
               return send(200, { ok: true, domain: clean, verifiedAt: record.verifiedAt });
@@ -133,7 +137,12 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
 
         const summary = store.summary(clean);
         const ver = store.getMerchantVerification(clean);
-        const targetUrl = url.searchParams.get("url") || `https://${clean}/`;
+        const requestedUrl = url.searchParams.get("url") || `https://${clean}/`;
+        let targetUrl = `https://${clean}/`;
+        try {
+          const parsedTarget = new URL(requestedUrl);
+          if (Store.cleanDomain(parsedTarget.hostname) === clean && /^https?:$/.test(parsedTarget.protocol)) targetUrl = parsedTarget.href;
+        } catch { /* use canonical domain URL */ }
         const companyNumber = url.searchParams.get("companyNumber");
 
         // Safe browsing lookup (server-cached)
@@ -197,13 +206,14 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
       }
 
       if (req.method === "GET" && url.pathname === "/v1/export/orders") {
+        if (!adminToken || bearer !== adminToken) return send(401, { error: "unauthorized" });
         const domain = url.searchParams.get("domain") || null;
         const format = url.searchParams.get("format") || "json";
         const rows = store.getOrderLogs(domain);
         if (format === "csv") {
           const header = "Shop domain,Storefront name,Receiver name,Trustpilot score,Trustpilot reviews,Trustpilot URL,Outcome,Order date,Answer date\n";
           const lines = rows.map((r) =>
-            [r.domain, r.storefrontName || "", r.receiverName || "", r.trustpilotScore ?? "", r.trustpilotCount ?? "", r.trustpilotUrl || "", r.outcome, r.orderDate || "", r.answerDate].map((f) => `"${String(f).replace(/"/g, '""')}"`).join(",")
+            [r.domain, r.storefrontName || "", r.receiverName || "", r.trustpilotScore ?? "", r.trustpilotCount ?? "", r.trustpilotUrl || "", r.outcome, r.orderDate || "", r.answerDate].map(csvCell).join(",")
           ).join("\n");
           res.writeHead(200, { "content-type": "text/csv", "content-disposition": "attachment; filename=orders-export.csv" });
           return res.end(header + lines);
@@ -231,6 +241,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
           if (tooBig) return;
           try {
             const data = JSON.parse(body);
+            if (!store.verifyCredential(data.installId, bearer)) return send(401, { error: "invalid credential" });
             store.add(data);
 
             // Record in order log for payment processor export (Step 4)
@@ -247,7 +258,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
               store.addOrderLog({
                 domain: data.domain,
                 storefrontName: data.storefrontName,
-                receiverName: data.receiverName,
+                receiverName: null,
                 trustpilotScore: tpScore,
                 trustpilotCount: tpCount,
                 trustpilotUrl: tpUrl,
@@ -278,8 +289,8 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const env = process.env;
-  if (env.NODE_ENV === "production" && !env.REPORT_SALT) {
-    console.error("REPORT_SALT is required in production");
+  if (env.NODE_ENV === "production" && (!env.REPORT_SALT || !env.ADMIN_TOKEN || !env.CORS_ORIGIN || env.CORS_ORIGIN === "*")) {
+    console.error("REPORT_SALT, ADMIN_TOKEN and a restricted CORS_ORIGIN are required in production");
     process.exit(1);
   }
   const store = new Store({
@@ -293,7 +304,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     corsOrigin: env.CORS_ORIGIN || "*",
     sbKey: env.GOOGLE_SAFE_BROWSING_KEY || env.SAFE_BROWSING_KEY || "",
     chKey: env.COMPANIES_HOUSE_KEY || "",
-    tpKey: env.TRUSTPILOT_API_KEY || ""
+    tpKey: env.TRUSTPILOT_API_KEY || "",
+    adminToken: env.ADMIN_TOKEN || "",
+    merchantVerification: env.ENABLE_MERCHANT_VERIFICATION === "true"
   });
   const timer = setInterval(() => store.flush(), 5000);
   const stop = () => {

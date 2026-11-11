@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TrustCheck - Safe Shopping Advisor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Real-time risk assessment, seller reviews and scam warnings for online stores.",
   "minimum_chrome_version": "110",
   "permissions": [
@@ -26,6 +26,12 @@
     "service_worker": "background.js",
     "type": "module"
   },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -33,6 +39,7 @@
         "https://*/*"
       ],
       "js": [
+        "lib/merchant-rating.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -61,6 +68,7 @@
         "*://*.qwant.com/*"
       ],
       "js": [
+        "lib/search-seller.js",
         "search_hover.js"
       ],
       "run_at": "document_idle",
@@ -69,6 +77,10 @@
   ],
   "action": {
     "default_title": "TrustCheck",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    },
     "default_popup": "popup.html"
   },
   "options_page": "options.html"

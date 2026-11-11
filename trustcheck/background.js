@@ -5,7 +5,7 @@ import { historySignals, historyLines } from "./lib/history.js";
 import { priceContext, priceSignals } from "./lib/price.js";
 import { buildReport } from "./lib/score.js";
 import { extractCompanyNumber, fetchCompany, companySignals } from "./lib/companies.js";
-import { fetchSummary, fetchCheck, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
+import { fetchSummary, fetchCheck, registerClient, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
 import { createReminder, handleReminderAnswer } from "./lib/reminders.js";
 
 const TTL = 6 * 3600 * 1000;
@@ -70,7 +70,7 @@ async function analyze(url, tabId, force = false) {
       serverReviews = c.reviews || null;
     } else {
       try {
-        const checkData = await fetchCheck(backend, domain, { url, companyNumber: number || "" });
+        const checkData = await fetchCheck(backend, domain, { url: u.origin + "/", companyNumber: number || "" });
         buyer = checkData.summary || null;
         backendVerified = !!checkData.verifiedMerchant;
         serverSb = checkData.safeBrowsing || null;
@@ -109,7 +109,7 @@ async function analyze(url, tabId, force = false) {
   }
 
   if (backendVerified) {
-    companySigs.push({ id: "merchant-verified", label: "Verified Merchant Identity", status: "good", points: 20, detail: "Domain ownership and business registration cryptographically verified." });
+    companySigs.push({ id: "merchant-verified", label: "Domain ownership verified", status: "info", points: 0, detail: "The operator proved control of this domain. This does not verify fulfilment or product quality." });
   }
 
   const pk = "price:" + domain;
@@ -139,7 +139,10 @@ async function analyze(url, tabId, force = false) {
     feedback: buyerFeedback(buyer),
     buyerTotal: buyer && !buyer.hidden ? buyer.total : 0,
     sixMonthNonDelivery: buyer?.sixMonthNonDelivery || 0,
-    sixMonthNotMatched: buyer?.sixMonthNotMatched || 0
+    sixMonthNotMatched: buyer?.sixMonthNotMatched || 0,
+    sixMonthDelivered: buyer?.sixMonthDelivered || 0,
+    sixMonthObservedTotal: buyer?.sixMonthObservedTotal || 0,
+    minReports: buyer?.minReports || 3
   });
   const purchase = (await chrome.storage.local.get("purchase:" + domain))["purchase:" + domain];
   if (purchase && Date.now() - purchase.at < 180 * 86400000) report.purchase = purchase;
@@ -181,27 +184,34 @@ async function rememberPurchase(tabUrl, scan) {
       at: Date.now(),
       reported: false,
       amount: scan.orderAmount || null,
-      storefrontName: scan.storefrontName || null,
-      receiverName: scan.receiverName || null
+      storefrontName: scan.storefrontName || null
     };
     await chrome.storage.local.set({ [key]: purchaseObj });
 
     // Step 2: Store local reminder 14 days in the future without personal data
     try {
-      const { reminders = [] } = await chrome.storage.local.get({ reminders: [] });
+      const { orderReminders = true, reminders = [] } = await chrome.storage.local.get({ orderReminders: true, reminders: [] });
+      if (!orderReminders) return;
       if (!reminders.some((r) => r.domain === domain && Math.abs(r.createdAt - Date.now()) < 7 * 86400000)) {
-        const rem = createReminder({
+        const rem = await createReminder({
           domain,
           amount: scan.orderAmount,
           orderId: scan.orderId,
-          storefrontName: scan.storefrontName,
-          receiverName: scan.receiverName
+          storefrontName: scan.storefrontName
         });
         reminders.push(rem);
         await chrome.storage.local.set({ reminders });
       }
     } catch { /* storage unavailable */ }
   }
+}
+
+async function reportCredential(backend) {
+  const { reportCredential: stored } = await chrome.storage.local.get({ reportCredential: null });
+  if (stored?.installId && stored?.token && stored?.backend === backend) return stored;
+  const credential = { ...(await registerClient(backend)), backend };
+  await chrome.storage.local.set({ reportCredential: credential, installId: credential.installId });
+  return credential;
 }
 
 // Step 2: 14-day reminder alarm & notification processor
@@ -216,19 +226,21 @@ export async function checkDueReminders() {
     const now = Date.now();
     for (let i = 0; i < reminders.length; i++) {
       const rem = reminders[i];
-      if (rem.status === "pending" && now >= rem.remindAt) {
+      if (rem.status === "pending" && !rem.shownAt && now >= rem.remindAt) {
         if (chrome.notifications) {
-          chrome.notifications.create(rem.id, {
+          await chrome.notifications.create(rem.id, {
             type: "basic",
             iconUrl: chrome.runtime.getURL("icons/icon128.png"),
             title: "TrustCheck: Order update",
             message: `Did your order from ${rem.domain}${rem.amount ? ` (${rem.amount})` : ""} arrive?`,
             buttons: [
-              { title: "Yes, arrived" },
-              { title: "No, did not arrive" }
+              { title: "Answer" },
+              { title: "Not yet" }
             ],
             requireInteraction: true
           });
+          reminders[i] = { ...rem, shownAt: now };
+          await chrome.storage.local.set({ reminders });
         }
         break;
       }
@@ -243,68 +255,27 @@ if (chrome.alarms?.onAlarm) {
 }
 checkDueReminders();
 
-// Handle notification button clicks (Yes/No/Not-yet)
+async function saveReminderAnswer(reminders, remIndex, answer, backend = "") {
+  const { updatedReminder, report } = handleReminderAnswer(reminders[remIndex], answer);
+  reminders[remIndex] = updatedReminder;
+  await chrome.storage.local.set({ reminders });
+  if (backend && report) {
+    const credential = await reportCredential(backend);
+    await submitReport(backend, credential.installId, credential.token, report.domain, report.outcome, report.tags, report.purchaseId, report);
+  }
+  return updatedReminder;
+}
+
+// Each order creates at most two reminder notifications. Answers are collected on an extension page.
 if (chrome.notifications?.onButtonClicked) {
   chrome.notifications.onButtonClicked.addListener(async (notifId, buttonIndex) => {
     try {
-      const { reminders = [], backend = "", installId = "" } = await chrome.storage.local.get({ reminders: [], backend: "", installId: "" });
+      const { reminders = [], backend = "" } = await chrome.storage.local.get({ reminders: [], backend: "" });
       const remIndex = reminders.findIndex((r) => r.id === notifId);
       if (remIndex === -1) return;
-      const rem = reminders[remIndex];
-
-      if (buttonIndex === 0) {
-        // "Yes, arrived" -> ask follow-up question
-        chrome.notifications.clear(notifId);
-        chrome.notifications.create(rem.id + ":match", {
-          type: "basic",
-          iconUrl: chrome.runtime.getURL("icons/icon128.png"),
-          title: "TrustCheck: Order update",
-          message: `Did the item from ${rem.domain} match the listing?`,
-          buttons: [
-            { title: "Yes, matched" },
-            { title: "No, did not match" }
-          ],
-          requireInteraction: true
-        });
-        return;
-      }
-
-      if (buttonIndex === 1) {
-        // "No, did not arrive"
-        chrome.notifications.clear(notifId);
-        const { updatedReminder, report } = handleReminderAnswer(rem, "no");
-        reminders[remIndex] = updatedReminder;
-        await chrome.storage.local.set({ reminders });
-
-        if (backend && report) {
-          let id = installId || crypto.randomUUID();
-          if (!installId) await chrome.storage.local.set({ installId: id });
-          submitReport(backend, id, report.domain, report.outcome, report.tags, report.purchaseId, report).catch(() => {});
-        }
-      }
-    } catch { /* ignore */ }
-  });
-
-  chrome.notifications.onButtonClicked.addListener(async (notifId, buttonIndex) => {
-    if (!notifId.endsWith(":match")) return;
-    try {
-      const baseId = notifId.replace(":match", "");
-      const { reminders = [], backend = "", installId = "" } = await chrome.storage.local.get({ reminders: [], backend: "", installId: "" });
-      const remIndex = reminders.findIndex((r) => r.id === baseId);
-      if (remIndex === -1) return;
-      const rem = reminders[remIndex];
       chrome.notifications.clear(notifId);
-
-      const answer = buttonIndex === 0 ? "yes_matched" : "yes_unmatched";
-      const { updatedReminder, report } = handleReminderAnswer(rem, answer);
-      reminders[remIndex] = updatedReminder;
-      await chrome.storage.local.set({ reminders });
-
-      if (backend && report) {
-        let id = installId || crypto.randomUUID();
-        if (!installId) await chrome.storage.local.set({ installId: id });
-        submitReport(backend, id, report.domain, report.outcome, report.tags, report.purchaseId, report).catch(() => {});
-      }
+      if (buttonIndex === 0) await chrome.tabs.create({ url: chrome.runtime.getURL(`reminder.html?id=${encodeURIComponent(notifId)}`) });
+      else await saveReminderAnswer(reminders, remIndex, "not_yet", backend);
     } catch { /* ignore */ }
   });
 }
@@ -319,12 +290,14 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
           title: "TrustCheck: Order update (Test)",
           message: "Did your order from koadclo.com (£59.99) arrive?",
           buttons: [
-            { title: "Yes, arrived" },
-            { title: "No, did not arrive" }
+            { title: "Answer" },
+            { title: "Not yet" }
           ],
           requireInteraction: true
+        }, (notificationId) => {
+          const err = chrome.runtime.lastError;
+          reply(err ? { ok: false, error: err.message } : { ok: !!notificationId });
         });
-        reply({ ok: true });
       } else {
         reply({ ok: false, error: "Notifications API not available" });
       }
@@ -339,6 +312,17 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       try { await rememberPurchase(sender.tab.url, msg.scan); } catch { /* invalid tab URL or storage unavailable */ }
       await refresh(sender.tab.id, sender.tab.url, false);
     })();
+  } else if (msg.type === "answerReminder") {
+    (async () => {
+      try {
+        const { reminders = [], backend = "" } = await chrome.storage.local.get({ reminders: [], backend: "" });
+        const remIndex = reminders.findIndex((r) => r.id === msg.id);
+        if (remIndex === -1) return reply({ ok: false, error: "Reminder not found" });
+        await saveReminderAnswer(reminders, remIndex, msg.answer, backend);
+        reply({ ok: true });
+      } catch (e) { reply({ ok: false, error: String(e.message || e) }); }
+    })();
+    return true;
   } else if (msg.type === "lookup") {
     // Hover lookup from a search page: quick check of one result's domain (no page scan available).
     (async () => {
@@ -354,13 +338,12 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   } else if (msg.type === "submitReport") {
     (async () => {
       try {
-        const { backend, installId } = await chrome.storage.local.get({ backend: "", installId: "" });
+        const { backend } = await chrome.storage.local.get({ backend: "" });
         if (!backend) return reply({ ok: false, error: "No report server set in Options" });
-        let id = installId;
-        if (!id) { id = crypto.randomUUID(); await chrome.storage.local.set({ installId: id }); }
+        const credential = await reportCredential(backend);
         const key = "purchase:" + msg.domain, purchase = (await chrome.storage.local.get(key))[key];
         const purchaseId = purchase && !purchase.reported && purchase.id === msg.purchaseId ? purchase.id : null;
-        await submitReport(backend, id, msg.domain, msg.outcome, msg.tags || [], purchaseId);
+        await submitReport(backend, credential.installId, credential.token, msg.domain, msg.outcome, msg.tags || [], purchaseId);
         if (purchaseId) await chrome.storage.local.set({ [key]: { ...purchase, reported: true } });
         buyerCache.delete(msg.domain);
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

@@ -46,7 +46,13 @@ test("http round trip + rate limit", async () => {
   const srv = createServer(new Store({ minReports: 1 }), { rateLimit: 3 });
   await new Promise((r) => srv.listen(0, r));
   const base = `http://127.0.0.1:${srv.address().port}`;
-  const post = (n) => fetch(base + "/v1/report", { method: "POST", body: JSON.stringify(rep(n, "never", ["fake_tracking"])) });
+  const credentials = [];
+  for (let n = 1; n <= 4; n++) credentials.push(await (await fetch(base + "/v1/register", { method: "POST" })).json());
+  const post = (n) => fetch(base + "/v1/report", {
+    method: "POST",
+    headers: { authorization: `Bearer ${credentials[n - 1].token}` },
+    body: JSON.stringify({ ...rep(n, "never", ["fake_tracking"]), installId: credentials[n - 1].installId })
+  });
   for (let n = 1; n <= 3; n++) assert.equal((await post(n)).status, 200);
   assert.equal((await post(4)).status, 429);
   const sum = await (await fetch(base + "/v1/summary?domain=shop.example")).json();
@@ -60,10 +66,21 @@ test("http round trip + rate limit", async () => {
 
   srv.close();
 });
+test("report writes require a server credential and exports require the admin token", async (t) => {
+  const srv = createServer(new Store({ minReports: 1 }), { rateLimit: 20, adminToken: "admin-secret" });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  t.after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const payload = rep(1, "never");
+  assert.equal((await fetch(base + "/v1/report", { method: "POST", body: JSON.stringify(payload) })).status, 401);
+  assert.equal((await fetch(base + "/v1/export/orders")).status, 401);
+  assert.equal((await fetch(base + "/v1/export/orders", { headers: { authorization: "Bearer wrong" } })).status, 401);
+  assert.equal((await fetch(base + "/v1/export/orders", { headers: { authorization: "Bearer admin-secret" } })).status, 200);
+});
 test("buyer signals and feedback", () => {
   const sum = { total: 10, windowDays: 30, outcomes: { ok: 1, problem: 3, never: 6 }, tags: { fake_tracking: 5, delayed: 2 } };
   assert.equal(buyerSignals(sum)[0].status, "bad");
-  assert.match(buyerSignals(sum)[0].label, /6 of 10 buyers say their order never arrived/);
+  assert.match(buyerSignals(sum)[0].label, /6 of 10 reports say the order never arrived/);
   assert.equal(buyerFeedback(sum)[0].label, "order never arrived");
   assert.equal(buyerSignals({ total: 2, hidden: true })[0].status, "info");
   assert.equal(buyerSignals({ total: 8, outcomes: { ok: 7, problem: 1, never: 0 } })[0].status, "good");

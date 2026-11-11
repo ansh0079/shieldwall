@@ -3,10 +3,17 @@
 import fs from "node:fs";
 
 const [serverUrl = "http://localhost:8787", outFile = "orders-export.csv"] = process.argv.slice(2);
+const adminToken = process.env.ADMIN_TOKEN || "";
+if (!adminToken) {
+  console.error("ADMIN_TOKEN is required");
+  process.exit(1);
+}
 
 console.log(`Fetching order log feed from ${serverUrl}...`);
 try {
-  const res = await fetch(`${serverUrl.replace(/\/$/, "")}/v1/export/orders?format=csv`);
+  const res = await fetch(`${serverUrl.replace(/\/$/, "")}/v1/export/orders?format=csv`, {
+    headers: { authorization: `Bearer ${adminToken}` }
+  });
   if (!res.ok) throw new Error("HTTP " + res.status);
   const csv = await res.text();
   fs.writeFileSync(outFile, csv, "utf8");
