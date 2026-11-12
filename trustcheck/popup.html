@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <link rel="stylesheet" href="popup.css">
-  <title>TrustCheck</title>
+  <title>BeforeYouBuy</title>
 </head>
 <body>
   <div id="loading" role="status">Checking this site…</div>
@@ -24,6 +24,7 @@
     <div id="analysisMeta" class="analysis-meta"></div>
 
     <div id="reviews"></div>
+    <div id="buyerVotes" class="summary-box" hidden></div>
 
     <section id="outcomes" class="outcomes" hidden>
       <div class="outcome-head"><strong>Observed order outcomes</strong><span>Last 6 months</span></div>
@@ -42,21 +43,20 @@
       <ul id="setupSignals"></ul>
     </details>
 
-    <h2>Report Your Experience</h2>
+    <h2>One-click seller feedback</h2>
     <div id="report">
       <div id="rs1">
-        <p>Did your order from this shop arrive?</p>
+        <p>How did this seller do?</p>
         <p id="proof"></p>
+        <label for="reportDetails">Add details (optional, 300 characters)</label>
+        <textarea id="reportDetails" maxlength="300" rows="3" placeholder="What happened with this seller?"></textarea>
+        <small class="report-note">Please omit personal and payment details. Written feedback is reviewed before any public use.</small>
         <div class="btns">
-          <button data-o="ok" type="button">Arrived, fine</button>
-          <button data-o="problem" type="button">Had a problem</button>
+          <button data-o="ok" type="button">Good experience</button>
+          <button data-o="problem" type="button">Problem</button>
           <button data-o="never" type="button">Never arrived</button>
         </div>
-      </div>
-      <div id="rs2" hidden>
-        <p>What went wrong? (optional)</p>
-        <div id="chips"></div>
-        <button id="send" type="button">Send report</button>
+        <details><summary>Optional: what went wrong?</summary><div id="chips"></div></details>
       </div>
       <p id="rmsg" hidden></p>
     </div>

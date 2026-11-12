@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Zero-dependency packaging tool for TrustCheck (Chrome + Firefox MV3 distributions).
+// Zero-dependency packaging tool for BeforeYouBuy (Chrome + Firefox MV3 distributions).
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -133,15 +133,15 @@ function run() {
   // 1. Chrome distribution
   const chromeData = collectFiles("chrome");
   const chromeZip = createZip(chromeData.fileList);
-  const chromeOut = path.join(DIST, `trustcheck-chrome-v${chromeData.version}.zip`);
+  const chromeOut = path.join(DIST, `beforeyoubuy-chrome-v${chromeData.version}.zip`);
   fs.writeFileSync(chromeOut, chromeZip);
   console.log(`✓ Packaged Chrome release (${chromeData.fileList.length} files): ${chromeOut} (${(chromeZip.length / 1024).toFixed(1)} KB)`);
 
   // 2. Firefox distribution
   const ffData = collectFiles("firefox");
   const ffZip = createZip(ffData.fileList);
-  const ffOut = path.join(DIST, `trustcheck-firefox-v${ffData.version}.zip`);
-  const ffXpi = path.join(DIST, `trustcheck-firefox-v${ffData.version}.xpi`);
+  const ffOut = path.join(DIST, `beforeyoubuy-firefox-v${ffData.version}.zip`);
+  const ffXpi = path.join(DIST, `beforeyoubuy-firefox-v${ffData.version}.xpi`);
   fs.writeFileSync(ffOut, ffZip);
   fs.writeFileSync(ffXpi, ffZip);
   console.log(`✓ Packaged Firefox release (${ffData.fileList.length} files): ${ffOut} (${(ffZip.length / 1024).toFixed(1)} KB)`);

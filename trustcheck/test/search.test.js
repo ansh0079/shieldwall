@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { isSearchEngine } from "../lib/domain.js";
 import "../lib/search-seller.js";
 
-const { explicitSellerUrl, sameProduct, visibleSellerName } = globalThis.TrustCheckSearch;
+const { explicitSellerUrl, sameProduct, visibleSellerName, isShoppingResultCard } = globalThis.TrustCheckSearch;
+
+test("hover cards require a priced shopping result", () => {
+  assert.equal(isShoppingResultCard("asics gel kayano 31 cream black uk"), false);
+  assert.equal(isShoppingResultCard("Men's running shoes £59.99 Koadclo"), true);
+  assert.equal(isShoppingResultCard("Seller: Shoes\n99.00 GBP"), true);
+});
 
 test("search engines are neutral", () => {
   for (const h of ["www.google.com", "google.co.uk", "shopping.google.com", "www.bing.com", "duckduckgo.com", "search.brave.com"])

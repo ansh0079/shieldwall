@@ -1,4 +1,4 @@
-// Trustpilot summary provider for the TrustCheck report server.
+// Trustpilot summary provider for the BeforeYouBuy report server.
 // Runs on the server so API keys are never shipped in the browser extension.
 import { summarizeThemes } from "../lib/themes.js";
 

@@ -22,11 +22,12 @@ export async function fetchSummary(base, domain) {
   return res.json();
 }
 
-export async function fetchCheck(base, domain, { url = "", companyNumber = "" } = {}) {
+export async function fetchCheck(base, domain, { url = "", companyNumber = "", fresh = false } = {}) {
   let endpoint = `${base.replace(/\/$/, "")}/v1/check?domain=${encodeURIComponent(domain)}`;
   if (url) endpoint += `&url=${encodeURIComponent(url)}`;
   if (companyNumber) endpoint += `&companyNumber=${encodeURIComponent(companyNumber)}`;
-  const res = await fetch(endpoint);
+  if (fresh) endpoint += "&fresh=1";
+  const res = await fetch(endpoint, fresh ? { cache: "no-store" } : undefined);
   if (!res.ok) throw new Error("HTTP " + res.status);
   return res.json();
 }
@@ -46,6 +47,7 @@ export async function submitReport(base, installId, token, domain, outcome, tags
       outcome,
       tags,
       purchaseId,
+      details: extra.details || "",
       storefrontName: extra.storefrontName || null,
       receiverName: extra.receiverName || null,
       orderDate: extra.orderDate || null,
@@ -65,7 +67,7 @@ export function buyerSignals(sum) {
   const { ok = 0, problem = 0, never = 0 } = sum.outcomes || {};
   const t = sum.total, days = sum.windowDays || 30;
   const observed = sum.purchaseObserved || 0;
-  const proof = observed ? ` ${observed} followed an order confirmation observed by TrustCheck.` : "";
+  const proof = observed ? ` ${observed} followed an order confirmation observed by BeforeYouBuy.` : "";
   const mk = (status, points, label) => [{ id: "buyers", label, status, points, detail: `Based on ${t} buyer reports in the last ${days} days.${proof}` }];
   if (never / t >= 0.4) return mk("bad", -35, `${never} of ${t} reports say the order never arrived`);
   if ((never + problem) / t >= 0.5) return mk("bad", -20, `${never + problem} of ${t} reports describe a problem`);

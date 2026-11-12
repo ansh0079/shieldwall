@@ -41,6 +41,16 @@ test("validation rejects bad input", () => {
   assert.throws(() => s.add({ ...rep(1, "never"), domain: "a b/c" }));
   assert.throws(() => s.add({ ...rep(1, "never"), installId: "x" }));
   assert.throws(() => s.add({ ...rep(1, "never"), purchaseId: "not valid" }));
+  assert.throws(() => s.add({ ...rep(1, "never"), details: "x".repeat(301) }));
+  assert.throws(() => s.add({ ...rep(1, "never"), details: { text: "bad" } }));
+});
+test("optional written details stay out of public summaries", () => {
+  const s = new Store({ minReports: 1 });
+  s.add({ ...rep(1, "problem"), details: "  Late delivery and poor support.  " });
+  assert.equal(s.feedbackDetails("shop.example")[0].details, "Late delivery and poor support.");
+  assert.equal(JSON.stringify(s.summary("shop.example")).includes("Late delivery"), false);
+  s.add({ ...rep(1, "ok"), details: "" });
+  assert.equal(s.feedbackDetails("shop.example").length, 0);
 });
 test("http round trip + rate limit", async () => {
   const srv = createServer(new Store({ minReports: 1 }), { rateLimit: 3 });
@@ -76,6 +86,29 @@ test("report writes require a server credential and exports require the admin to
   assert.equal((await fetch(base + "/v1/export/orders")).status, 401);
   assert.equal((await fetch(base + "/v1/export/orders", { headers: { authorization: "Bearer wrong" } })).status, 401);
   assert.equal((await fetch(base + "/v1/export/orders", { headers: { authorization: "Bearer admin-secret" } })).status, 200);
+  assert.equal((await fetch(base + "/v1/export/feedback")).status, 401);
+  assert.equal((await fetch(base + "/v1/export/feedback", { headers: { authorization: "Bearer admin-secret" } })).status, 200);
+});
+test("written feedback reaches only the private export", async (t) => {
+  const srv = createServer(new Store({ minReports: 1 }), { adminToken: "admin-secret" });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  t.after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const credential = await (await fetch(base + "/v1/register", { method: "POST" })).json();
+  const details = "The parcel arrived late.";
+  const submitted = await fetch(base + "/v1/report", {
+    method: "POST",
+    headers: { authorization: `Bearer ${credential.token}` },
+    body: JSON.stringify({ ...rep(1, "problem"), installId: credential.installId, details })
+  });
+  assert.equal(submitted.status, 200);
+  const publicSummary = await (await fetch(base + "/v1/summary?domain=shop.example")).text();
+  assert.equal(publicSummary.includes(details), false);
+  const privateExport = await (await fetch(base + "/v1/export/feedback", {
+    headers: { authorization: "Bearer admin-secret" }
+  })).json();
+  assert.equal(privateExport.rows[0].details, details);
+  assert.equal("install" in privateExport.rows[0], false);
 });
 test("buyer signals and feedback", () => {
   const sum = { total: 10, windowDays: 30, outcomes: { ok: 1, problem: 3, never: 6 }, tags: { fake_tracking: 5, delayed: 2 } };
@@ -84,4 +117,29 @@ test("buyer signals and feedback", () => {
   assert.equal(buyerFeedback(sum)[0].label, "order never arrived");
   assert.equal(buyerSignals({ total: 2, hidden: true })[0].status, "info");
   assert.equal(buyerSignals({ total: 8, outcomes: { ok: 7, problem: 1, never: 0 } })[0].status, "good");
+});
+
+test("mobile share check returns domain-only evidence and rejects search engines", async (t) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, options) => {
+    const url = String(input);
+    if (url.startsWith("https://rdap.org/")) return new Response(JSON.stringify({ events: [{ eventAction: "registration", eventDate: "2020-01-01T00:00:00Z" }] }), { status: 200 });
+    if (url.startsWith("https://web.archive.org/")) return new Response(JSON.stringify([["timestamp"], ["20200101000000"]]), { status: 200 });
+    return originalFetch(input, options);
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const srv = createServer(new Store(), { readLimit: 20 });
+  await new Promise((resolve) => srv.listen(0, "127.0.0.1", resolve));
+  t.after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const invalid = await originalFetch(`${base}/v1/mobile-check?url=${encodeURIComponent("https://www.google.com/search?q=shoes")}`);
+  assert.equal(invalid.status, 400);
+  const response = await originalFetch(`${base}/v1/mobile-check?url=${encodeURIComponent("https://shop.example.com/checkout?token=secret")}`);
+  assert.equal(response.status, 200);
+  const report = await response.json();
+  assert.equal(report.domain, "example.com");
+  assert.equal(report.url, "https://shop.example.com/");
+  assert.ok(report.signals.some((signal) => signal.id === "age"));
+  assert.match(report.analysisScope, /page content.*not scanned/);
+  assert.ok(!JSON.stringify(report).includes("secret"));
 });

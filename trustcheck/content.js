@@ -11,16 +11,24 @@
     const has = (re) => links.some((l) => re.test(l));
     const hasPaymentFields = !!document.querySelector(
       'input[autocomplete^="cc-"], input[name*="card" i], input[name*="cvv" i], input[name*="cvc" i]');
-    const isShop = hasPaymentFields ||
-      !!document.querySelector('[class*="cart" i], [id*="cart" i], button[name="add"], form[action*="cart"]') ||
-      /add to (cart|bag|basket)/.test(text);
+    const hasCartControl = !!document.querySelector('button[name="add"], form[action*="cart"], button[class*="cart" i], button[id*="cart" i], a[href*="/cart" i], a[href*="/basket" i]');
+    const hasProductOffer = [...document.querySelectorAll('script[type="application/ld+json"]')]
+      .some((node) => /"@type"\s*:\s*"(?:Product|Offer|ProductGroup)"/i.test(node.textContent || ""));
+    const isShop = hasPaymentFields || /add to (cart|bag|basket)/.test(text) ||
+      (hasCartControl && (hasProductOffer || /\b(shop|products|delivery|shipping|checkout)\b/i.test(text)));
     const payFrame = !!document.querySelector('iframe[src*="paypal."], iframe[src*="klarna."], iframe[src*="clearpay."], iframe[src*="js.stripe.com"]');
     const payButton = [...document.querySelectorAll("button, input[type=submit], a[role=button]")]
       .some((b) => /(pay now|pay with|place (your )?order|complete (your )?(order|purchase)|buy now|paypal|klarna|clearpay)/i.test(b.textContent || b.value || ""));
-    const isCheckout = hasPaymentFields || payFrame || payButton || /\/(checkout|payment|pay)(\/|$|\?)/i.test(location.pathname);
+    const checkoutActivity = hasPaymentFields || payFrame || payButton || /\/(checkout|payment|pay)(\/|$|\?)/i.test(location.pathname);
+    const retailCheckoutContext = isShop || hasProductOffer || hasCartControl ||
+      /\b(shipping|delivery|order summary|your order|place order|shopping cart|basket)\b/i.test(text);
+    const isCheckout = checkoutActivity && retailCheckoutContext;
     const confirmationText = /(thank you for your (order|purchase)|order (is |has been )?confirmed|order confirmation|we(?:'ve| have) received your order)/i.test(text);
     const confirmationUrl = /\/(order-confirmation|order-complete|order-success|thank-you|thank_you|orders\/|purchase-success)(\/|$|\?)/i.test(location.pathname);
     const purchaseObserved = confirmationText && (confirmationUrl || /order\s*(number|no\.?|#)|confirmation\s*(number|no\.?|#)/i.test(text));
+    if (!isShop && !isCheckout && !purchaseObserved) {
+      return { pageUrl: location.href, isShop: false, isCheckout: false, purchaseObserved: false };
+    }
 
     let orderAmount = null;
     const amountMatch = text.match(/(?:total|paid|amount|charged)[:\s]*([£$€]\s*\d+(?:\.\d{2})?|\d+(?:\.\d{2})?\s*(?:GBP|USD|EUR))/i);
@@ -72,7 +80,7 @@
     // Legal footer lines (company number etc.), sent so the background can verify the company.
     const legal = (document.body?.innerText || "").split(/\n/).filter((l) => l.length < 240 && /(company|registered|registration|reg\.?)\s*(no|number|#)/i.test(l)).slice(0, 4);
     return {
-      isShop, hasPaymentFields, isCheckout, purchaseObserved, merchantRating, legal, title: (document.title || "").slice(0, 120),
+      pageUrl: location.href, isShop, hasPaymentFields, isCheckout, purchaseObserved, merchantRating, legal, title: (document.title || "").slice(0, 120),
       orderAmount, orderId, receiverName, storefrontName,
       hasInsecurePaymentAction, insecureActionHost,
       hasFreeWebmailContact, isLiquidationClaim,
@@ -143,7 +151,7 @@
     if (r.neutral) { host?.remove(); return; }   // search pages: no rating to show
     if (hidden) return;
     // Skip identical re-sends: rebuilding the badge would close a panel the user is hovering.
-    const key = JSON.stringify([r.score, r.verdict, r.feedback, r.reviews, r.buyerTotal, r.signals.map((x) => x.label)]);
+    const key = JSON.stringify([r.score, r.verdict, r.feedback, r.reviews, r.buyerTotal, r.buyerOutcomes, r.backendOn, r.signals.map((x) => x.label)]);
     if (key === lastKey && host?.isConnected) return;
     lastKey = key;
     const fresh = !host?.isConnected;            // only a brand-new badge slides in
@@ -153,7 +161,7 @@
     const style = document.createElement("style");
     style.textContent = `
       *{box-sizing:border-box;font:13px system-ui,sans-serif}
-      .drop{width:270px;background:#fff;color:#111827;border-radius:0 0 12px 12px;box-shadow:0 4px 18px rgba(0,0,0,.35);
+      .drop{width:min(350px,calc(100vw - 20px));background:#fff;color:#111827;border-radius:0 0 12px 12px;box-shadow:0 4px 18px rgba(0,0,0,.35);
         border-top:4px solid ${color};transform:translateY(-100%);transition:transform .35s ease;overflow:hidden}
       .drop.in{transform:translateY(0)}
       .bar{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:default}
@@ -161,10 +169,19 @@
       .v{font-weight:700;color:${color}}.sub{color:#6b7280;font-size:11px}
       .x{margin-left:auto;border:0;background:none;color:#6b7280;font-size:16px;cursor:pointer}
       .more{max-height:0;overflow:hidden;transition:max-height .25s ease;padding:0 12px}
-      .drop.open .more{max-height:260px;padding:2px 12px 10px}
+      .drop.open .more{max-height:calc(100vh - 105px);overflow-y:auto;padding:2px 12px 10px}
       .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin:6px 0 2px}
       .p{margin:4px 0;display:flex;gap:6px}.p i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px}
-      .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.info i{background:#9ca3af}`;
+      .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.info i{background:#9ca3af}
+      .tp{display:block;margin-top:9px;padding:7px;border-radius:7px;background:#4b5563;color:#fff;text-align:center;text-decoration:none;font-weight:700}
+      .tp:hover,.tp:focus-visible{background:#374151}
+      .sources{display:flex;flex-wrap:wrap;gap:5px;margin:7px 0 10px}
+      .sources a{padding:5px 7px;border:1px solid #d1d5db;border-radius:6px;color:#1f2937;text-decoration:none;font-size:11px;background:#fff}
+      .sources a:hover,.sources a:focus-visible{border-color:#374151;background:#f3f4f6}
+      .choices{display:flex;gap:4px;margin-top:6px}.choices button{flex:1;border:1px solid #d1d5db;background:#fff;border-radius:6px;padding:6px 2px;font-size:11px;cursor:pointer}
+      .choices button:hover{background:#f3f4f6}.feedback-status{font-size:11px;color:#4b5563;margin-top:6px}
+      .feedback-details{box-sizing:border-box;width:100%;min-height:46px;margin-top:7px;padding:6px;border:1px solid #d1d5db;border-radius:6px;font:11px system-ui;resize:vertical}
+      .feedback-note{font-size:10px;color:#6b7280;margin-top:4px}`;
     const drop = document.createElement("div"); drop.className = "drop";
     const bar = document.createElement("div"); bar.className = "bar";
     const sc = document.createElement("div"); sc.className = "score"; sc.textContent = r.verdict === "unverified" ? "?" : r.score;
@@ -183,6 +200,62 @@
       const d = document.createElement("div"); d.className = "p " + pt.status;
       const i = document.createElement("i"), l = document.createElement("span"); l.textContent = pt.text;
       d.append(i, l); more.append(d);
+    }
+    const tp = document.createElement("a");
+    tp.className = "tp";
+    tp.href = `https://www.trustpilot.com/review/${encodeURIComponent(r.domain)}`;
+    tp.target = "_blank";
+    tp.rel = "noopener noreferrer";
+    tp.textContent = Number.isFinite(r.reviews?.score)
+      ? `Read ${r.domain} reviews on Trustpilot ↗`
+      : `Check ${r.domain} on Trustpilot ↗`;
+    more.append(tp);
+    const sources = document.createElement("div"); sources.className = "sources";
+    for (const [name, label] of [["Google: reviews", "Search Google reviews ↗"], ["ScamAdviser", "ScamAdviser trust report ↗"], ["Who.is record", "Who.is domain record ↗"]]) {
+      const source = r.links?.find((item) => item.name === name);
+      if (!source?.url) continue;
+      const link = document.createElement("a");
+      link.href = source.url; link.target = "_blank"; link.rel = "noopener noreferrer"; link.textContent = label;
+      sources.append(link);
+    }
+    more.append(sources);
+    const feedbackHeading = document.createElement("div");
+    feedbackHeading.className = "h";
+    feedbackHeading.textContent = "Your seller feedback";
+    more.append(feedbackHeading);
+    if (r.backendOn) {
+      const explanation = document.createElement("div");
+      explanation.className = "feedback-status";
+      explanation.textContent = "One tap; self-reported unless an order confirmation was observed. You can update your response.";
+      more.append(explanation);
+      const details = document.createElement("textarea");
+      details.className = "feedback-details";
+      details.maxLength = 300;
+      details.placeholder = "Add details (optional, 300 characters)";
+      details.setAttribute("aria-label", "Optional seller feedback details");
+      const note = document.createElement("div"); note.className = "feedback-note";
+      note.textContent = "Omit personal and payment details. Written feedback is reviewed before public use.";
+      more.append(details, note);
+      const choices = document.createElement("div"); choices.className = "choices";
+      const status = document.createElement("div"); status.className = "feedback-status"; status.setAttribute("role", "status");
+      for (const [outcome, label] of [["ok", "Good"], ["problem", "Problem"], ["never", "Never arrived"]]) {
+        const button = document.createElement("button"); button.type = "button"; button.textContent = label;
+        button.onclick = async () => {
+          for (const b of choices.querySelectorAll("button")) b.disabled = true;
+          status.textContent = "Sending…";
+          try {
+            const result = await chrome.runtime.sendMessage({ type: "submitReport", domain: r.domain, outcome, tags: [], details: details.value.trim() });
+            status.textContent = result?.ok ? "Thanks — feedback sent." : `Could not send: ${result?.error || "server unavailable"}`;
+          } catch { status.textContent = "Could not connect to the report server."; }
+          for (const b of choices.querySelectorAll("button")) b.disabled = false;
+        };
+        choices.append(button);
+      }
+      more.append(choices, status);
+    } else {
+      const status = document.createElement("div"); status.className = "feedback-status";
+      status.textContent = "Start the local report server, or add a server URL in Options, then refresh this page to send feedback.";
+      more.append(status);
     }
     drop.append(bar, more);
     root.append(style, drop);
@@ -251,10 +324,10 @@
       a{color:#2563eb}`;
     const bg = document.createElement("div"); bg.className = "bg";
     const card = document.createElement("div"); card.className = "card";
-    card.setAttribute("role", "alertdialog"); card.setAttribute("aria-label", "TrustCheck warning");
+    card.setAttribute("role", "alertdialog"); card.setAttribute("aria-label", "BeforeYouBuy warning");
     const add = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; card.append(e); return e; };
     add("h1", "", "Think twice before paying here");
-    add("div", "sc", `${r.domain} scored ${r.score}/100 on TrustCheck`);
+    add("div", "sc", `${r.domain} scored ${r.score}/100 on BeforeYouBuy`);
 
     const reasons = document.createElement("ul");
     const pts = [];
@@ -325,7 +398,7 @@
 
     const disc = document.createElement("div");
     disc.style.cssText = "font-size:11px;color:#9ca3af;margin-top:14px;line-height:1.4;";
-    disc.textContent = "TrustCheck reports public evidence and buyer feedback. It does not guarantee the seller.";
+    disc.textContent = "BeforeYouBuy reports public evidence and buyer feedback. It does not guarantee the seller.";
     card.append(disc);
 
     const row = document.createElement("div"); row.className = "row";

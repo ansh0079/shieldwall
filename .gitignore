@@ -4,6 +4,9 @@ compare_report.html
 quietbrowse*.zip
 quietbrowse*.xpi
 trustcheck/dist/
+trustcheck/data.json
+trustcheck/.beta-chrome-profile/
+.chrome-trustcheck-smoke/
 *.log
 .DS_Store
 Thumbs.db

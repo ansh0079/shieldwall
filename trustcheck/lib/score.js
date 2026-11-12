@@ -28,10 +28,12 @@ export function buildReport({
   flagged = false,
   feedback = [],
   buyerTotal = 0,
+  buyerOutcomes = null,
   sixMonthNonDelivery = 0,
   sixMonthNotMatched = 0,
   sixMonthDelivered = 0,
   sixMonthObservedTotal = 0,
+  sixMonthOutcomes = null,
   minReports = 3
 }) {
   signals = [...signals];
@@ -128,8 +130,8 @@ export function buildReport({
 
   const checkDefinitions = [
     ["Domain history", ["age", "reuse"]],
-    ["Security threats", ["sb", "https", "lookalike", "ip", "pay-http", "pay-hijack", "punycode"]],
-    ["Seller identity", ["company", "merchant-verified"]],
+    ["Security threats", ["sb"]],
+    ["Seller identity", ["company"]],
     ["Independent reviews", ["tp"]],
     ["Buyer outcomes", ["buyers", "six-month-nondelivery", "six-month-notmatched"]],
     ["Site transparency", ["policies", "free-mail", "urgency", "liquidation"]],
@@ -137,10 +139,13 @@ export function buildReport({
   ];
   const checks = checkDefinitions.map(([name, ids]) => ({
     name,
-    status: signals.some((signal) => ids.includes(signal.id)) ? "checked" : "unavailable"
+    status: signals.some((signal) => ids.includes(signal.id) && signal.status !== "info") ||
+      (name === "Buyer outcomes" && !!sixMonthOutcomes) ||
+      (name === "Independent reviews" && Number.isFinite(reviews?.score) && Number.isFinite(reviews?.count))
+      ? "checked" : "unavailable"
   }));
   const checkedCount = checks.filter((check) => check.status === "checked").length;
-  const observedTotal = Math.max(sixMonthObservedTotal, sixMonthDelivered + sixMonthNonDelivery + sixMonthNotMatched);
+  const observedTotal = sixMonthOutcomes ? Object.values(sixMonthOutcomes).reduce((sum, value) => sum + value, 0) : 0;
   const pct = (value) => observedTotal ? Math.round(value * 100 / observedTotal) : 0;
 
   const order = { bad: 0, warn: 1, info: 2, good: 3 };
@@ -175,21 +180,21 @@ export function buildReport({
     merchantRating: merchantRating || null,
     feedback,
     buyerTotal,
+    buyerOutcomes,
     sixMonthNonDelivery,
     sixMonthNotMatched,
     sixMonthDelivered,
     sixMonthObservedTotal: observedTotal,
     minReports,
-    outcomeSummary: {
+    outcomeSummary: sixMonthOutcomes ? {
       total: observedTotal,
-      delivered: sixMonthDelivered,
-      nonDelivery: sixMonthNonDelivery,
-      notMatched: sixMonthNotMatched,
-      deliveredPercent: pct(sixMonthDelivered),
-      nonDeliveryPercent: pct(sixMonthNonDelivery),
-      notMatchedPercent: pct(sixMonthNotMatched),
+      ...sixMonthOutcomes,
+      deliveredPercent: pct(sixMonthOutcomes.delivered),
+      nonDeliveryPercent: pct(sixMonthOutcomes.nonDelivery),
+      notMatchedPercent: pct(sixMonthOutcomes.notMatched),
+      otherProblemsPercent: pct(sixMonthOutcomes.otherProblems),
       windowDays: 180
-    },
+    } : null,
     analysis: {
       checks,
       checkedCount,

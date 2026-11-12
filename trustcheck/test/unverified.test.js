@@ -18,3 +18,7 @@ test("real evidence keeps a caution verdict", () => {
 test("risky stays risky with no evidence", () => {
   assert.equal(base([sig("https", "bad", -25), sig("policies", "bad", -15)]).verdict, "risky");
 });
+test("coverage excludes HTTPS and failed lookups", () => {
+  const r = base([sig("https", "good", 5), sig("age", "info", 0), sig("company", "info", 0)]);
+  assert.equal(r.analysis.checkedCount, 0);
+});

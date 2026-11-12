@@ -37,10 +37,12 @@ export class Store {
             tags TEXT NOT NULL,
             proof TEXT NOT NULL,
             purchase TEXT,
+            details TEXT,
             at INTEGER NOT NULL,
             PRIMARY KEY (domain, install)
           );
           CREATE INDEX IF NOT EXISTS idx_reports_domain_at ON reports (domain, at);
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_purchase ON reports (domain, purchase) WHERE purchase IS NOT NULL;
           CREATE TABLE IF NOT EXISTS merchant_verifications (
             domain TEXT PRIMARY KEY,
             token TEXT NOT NULL,
@@ -61,6 +63,9 @@ export class Store {
           );
           CREATE INDEX IF NOT EXISTS idx_order_logs_domain ON order_logs (domain);
         `);
+        if (!this.db.prepare("PRAGMA table_info(reports)").all().some((column) => column.name === "details")) {
+          this.db.exec("ALTER TABLE reports ADD COLUMN details TEXT");
+        }
       } catch (error) {
         throw new Error(`Could not open SQLite database: ${error.message}`);
       }
@@ -189,17 +194,28 @@ export class Store {
     return [...this.orderLogs];
   }
 
-  add({ installId, domain, outcome, tags = [], purchaseId = null }) {
+  add({ installId, domain, outcome, tags = [], purchaseId = null, details = "" }) {
     domain = Store.cleanDomain(domain);
     if (!domain) throw new Error("invalid domain");
     if (!OUTCOMES.includes(outcome)) throw new Error("invalid outcome");
     if (typeof installId !== "string" || installId.length < 8 || installId.length > 64) throw new Error("invalid installId");
     if (purchaseId !== null && (typeof purchaseId !== "string" || !/^[a-f0-9-]{16,64}$/i.test(purchaseId))) throw new Error("invalid purchaseId");
     if (!Array.isArray(tags) || tags.length > TAGS.length || tags.some((t) => !TAGS.includes(t))) throw new Error("invalid tags");
+    if (typeof details !== "string" || details.length > 300) throw new Error("details must be 300 characters or fewer");
+    details = details.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
 
     const t = this.now();
     const install = this.hashInstall(installId);
     const key = `${domain}|${install}`;
+    const purchase = purchaseId ? this.hashInstall(purchaseId) : null;
+    if (purchase) {
+      if (this.useSqlite && this.db) {
+        const existing = this.db.prepare("SELECT install FROM reports WHERE domain = ? AND purchase = ?").get(domain, purchase);
+        if (existing && existing.install !== install) throw new Error("order already reported");
+      } else if ([...this.reports.values()].some((r) => r.domain === domain && r.purchase === purchase && r.install !== install)) {
+        throw new Error("order already reported");
+      }
+    }
 
     // Velocity / Burst mitigation
     const burstWindow = (this.domainBursts.get(domain) || []).filter((x) => t - x < HOUR);
@@ -216,13 +232,14 @@ export class Store {
       if (c >= this.maxPerInstallPerDay) throw new Error("daily report limit reached");
 
       const insertStmt = this.db.prepare(`
-        INSERT INTO reports (domain, install, outcome, tags, proof, purchase, at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO reports (domain, install, outcome, tags, proof, purchase, details, at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(domain, install) DO UPDATE SET
           outcome = excluded.outcome,
           tags = excluded.tags,
           proof = excluded.proof,
           purchase = excluded.purchase,
+          details = excluded.details,
           at = excluded.at
       `);
       insertStmt.run(
@@ -231,7 +248,8 @@ export class Store {
         outcome,
         JSON.stringify(outcome === "ok" ? [] : [...new Set(tags)]),
         purchaseId ? "purchase_observed" : "self_reported",
-        purchaseId ? this.hashInstall(purchaseId) : null,
+        purchase,
+        details,
         t
       );
       return;
@@ -247,10 +265,27 @@ export class Store {
       outcome,
       tags: outcome === "ok" ? [] : [...new Set(tags)],
       proof: purchaseId ? "purchase_observed" : "self_reported",
-      purchase: purchaseId ? this.hashInstall(purchaseId) : null,
+      purchase,
+      details,
       at: t
     });
     this.dirty = true;
+  }
+
+  // Private moderation queue. Written details never enter public summaries.
+  feedbackDetails(domain = null) {
+    const clean = domain === null ? null : Store.cleanDomain(domain);
+    if (domain !== null && !clean) throw new Error("invalid domain");
+    const since = this.now() - this.retentionDays * DAY;
+    if (this.useSqlite && this.db) {
+      const query = clean
+        ? this.db.prepare("SELECT domain, outcome, details, proof, at FROM reports WHERE domain = ? AND at >= ? AND details != '' ORDER BY at DESC LIMIT 500")
+        : this.db.prepare("SELECT domain, outcome, details, proof, at FROM reports WHERE at >= ? AND details != '' ORDER BY at DESC LIMIT 500");
+      return clean ? query.all(clean, since) : query.all(since);
+    }
+    return [...this.reports.values()].filter((r) => r.details && r.at >= since && (!clean || r.domain === clean))
+      .sort((a, b) => b.at - a.at).slice(0, 500)
+      .map(({ domain: d, outcome, details, proof, at }) => ({ domain: d, outcome, details, proof, at }));
   }
 
   summary(domain) {
@@ -292,12 +327,13 @@ export class Store {
     let sixMonthNonDelivery = 0;
     let sixMonthNotMatched = 0;
     let sixMonthDelivered = 0;
+    let sixMonthOtherProblems = 0;
     for (const r of sixMonthRows) {
       if (r.outcome === "never") sixMonthNonDelivery++;
       else if (r.outcome === "ok") sixMonthDelivered++;
       else if (r.outcome === "problem" && (r.tags.includes("not_as_described") || r.tags.includes("wrong_item") || r.tags.includes("counterfeit"))) {
         sixMonthNotMatched++;
-      }
+      } else if (r.outcome === "problem") sixMonthOtherProblems++;
     }
     const activeNonDelivery = sixMonthNonDelivery >= this.minReports ? sixMonthNonDelivery : 0;
     const activeNotMatched = sixMonthNotMatched >= this.minReports ? sixMonthNotMatched : 0;
@@ -314,6 +350,7 @@ export class Store {
         sixMonthNotMatched: activeNotMatched,
         sixMonthDelivered,
         sixMonthObservedTotal,
+        sixMonthOutcomes: sixMonthObservedTotal >= this.minReports ? { delivered: sixMonthDelivered, nonDelivery: sixMonthNonDelivery, notMatched: sixMonthNotMatched, otherProblems: sixMonthOtherProblems } : null,
         minReports: this.minReports
       };
     }
@@ -347,6 +384,7 @@ export class Store {
       sixMonthNotMatched: activeNotMatched,
       sixMonthDelivered,
       sixMonthObservedTotal,
+      sixMonthOutcomes: sixMonthObservedTotal >= this.minReports ? { delivered: sixMonthDelivered, nonDelivery: sixMonthNonDelivery, notMatched: sixMonthNotMatched, otherProblems: sixMonthOtherProblems } : null,
       minReports: this.minReports,
       smoothed: {
         neverRate: Number(smoothedNeverRate.toFixed(3)),

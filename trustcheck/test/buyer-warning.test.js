@@ -94,6 +94,7 @@ test("Step 2 & 3: 14-day reminder answer feeds 6-month non-delivery warning coun
     signals: [],
     sixMonthNonDelivery: sum.sixMonthNonDelivery,
     sixMonthObservedTotal: sum.sixMonthObservedTotal,
+    sixMonthOutcomes: sum.sixMonthOutcomes,
     minReports: sum.minReports
   });
 
@@ -106,11 +107,40 @@ test("Step 2 & 3: 14-day reminder answer feeds 6-month non-delivery warning coun
     delivered: 0,
     nonDelivery: 2,
     notMatched: 0,
+    otherProblems: 0,
     deliveredPercent: 0,
     nonDeliveryPercent: 100,
     notMatchedPercent: 0,
+    otherProblemsPercent: 0,
     windowDays: 180
   });
+});
+
+test("outcome breakdown uses complete categories and hides small samples", () => {
+  const store = new Store({ minReports: 3, salt: "test-salt" });
+  const submit = (n, outcome, tags = []) => store.add({
+    installId: `installation-${n}`,
+    domain: "example.com",
+    outcome,
+    tags,
+    purchaseId: `a1b2c3d4e5f60718293a4b5c6d7e8f9${String(n).padStart(2, "0")}`
+  });
+  submit(1, "ok");
+  submit(2, "never");
+  assert.equal(store.summary("example.com").sixMonthOutcomes, null);
+  submit(3, "problem", ["delayed"]);
+  const sum = store.summary("example.com");
+  assert.deepEqual(sum.sixMonthOutcomes, { delivered: 1, nonDelivery: 1, notMatched: 0, otherProblems: 1 });
+  const report = buildReport({ url: "https://example.com", domain: "example.com", sixMonthOutcomes: sum.sixMonthOutcomes });
+  assert.equal(report.outcomeSummary.nonDeliveryPercent, 33);
+  assert.equal(report.outcomeSummary.otherProblemsPercent, 33);
+});
+
+test("one observed order cannot be counted by two installations", () => {
+  const store = new Store({ salt: "test-salt" });
+  const purchaseId = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+  store.add({ installId: "installation-one", domain: "example.com", outcome: "ok", purchaseId });
+  assert.throws(() => store.add({ installId: "installation-two", domain: "example.com", outcome: "never", purchaseId }), /already reported/);
 });
 
 test("Step 4: Order logs are recorded and exported without buyer personal data", async (t) => {

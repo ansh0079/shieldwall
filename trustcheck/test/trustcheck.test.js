@@ -3,9 +3,31 @@ import assert from "node:assert/strict";
 import { registrableDomain } from "../lib/domain.js";
 import { urlSignals, pageSignals } from "../lib/heuristics.js";
 import { buildReport } from "../lib/score.js";
+import { isRetailPage } from "../lib/retail.js";
+import { reviewLinks } from "../lib/providers.js";
+import { ignoreClosedTab } from "../lib/tab-race.js";
 
 const ids = (s) => s.map((x) => x.id);
 const rep = (url, extra = []) => buildReport({ url, domain: registrableDomain(new URL(url).hostname), signals: [...urlSignals(url), ...extra], links: [] });
+
+test("checks only pages with retail or order activity", () => {
+  assert.equal(isRetailPage(null), false);
+  assert.equal(isRetailPage({ isShop: false, isCheckout: false, purchaseObserved: false }), false);
+  assert.equal(isRetailPage({ isShop: true }), true);
+  assert.equal(isRetailPage({ isCheckout: true }), true);
+  assert.equal(isRetailPage({ purchaseObserved: true }), true);
+});
+test("seller source links identify the domain without implying imported scores", () => {
+  const links = Object.fromEntries(reviewLinks("zeravi.co.uk").map(({ name, url }) => [name, url]));
+  assert.match(links["Google: reviews"], /zeravi\.co\.uk%20reviews/);
+  assert.equal(links.ScamAdviser, "https://www.scamadviser.com/check-website/zeravi.co.uk");
+  assert.equal(links["Who.is record"], "https://who.is/whois/zeravi.co.uk");
+});
+test("closed-tab UI races never become unhandled extension errors", async () => {
+  assert.equal(await ignoreClosedTab(() => Promise.reject(new Error("No tab with id"))), null);
+  assert.equal(await ignoreClosedTab(() => { throw new Error("No tab with id"); }), null);
+  assert.equal(await ignoreClosedTab(() => Promise.resolve("sent")), "sent");
+});
 
 test("registrable domain", () => {
   assert.equal(registrableDomain("shop.example.co.uk"), "example.co.uk");

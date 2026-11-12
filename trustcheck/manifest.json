@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "TrustCheck - Safe Shopping Advisor",
+  "name": "BeforeYouBuy - Seller Check",
   "version": "0.3.0",
   "description": "Real-time risk assessment, seller reviews and scam warnings for online stores.",
   "minimum_chrome_version": "110",
@@ -76,7 +76,7 @@
     }
   ],
   "action": {
-    "default_title": "TrustCheck",
+    "default_title": "BeforeYouBuy",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"

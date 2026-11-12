@@ -1,9 +1,17 @@
-// TrustCheck report server. `node server/server.js`
+// BeforeYouBuy report server. `node server/server.js`
 // Env: PORT(8787) HOST(0.0.0.0) DATA_FILE(data.json / reports.sqlite) MIN_REPORTS(3) RATE_LIMIT(20 reports/h/IP)
 //      TRUST_PROXY(false: set true behind a reverse proxy) CORS_ORIGIN(*) REPORT_SALT(required in production)
 import http from "node:http";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { Store } from "./store.js";
 import { safeBrowsing } from "../lib/providers.js";
+import { domainAge, firstArchived, reviewLinks } from "../lib/providers.js";
+import { registrableDomain, isSearchEngine } from "../lib/domain.js";
+import { urlSignals } from "../lib/heuristics.js";
+import { historySignals, historyLines } from "../lib/history.js";
+import { buyerSignals, buyerFeedback } from "../lib/buyers.js";
+import { buildReport } from "../lib/score.js";
 import { fetchCompany } from "../lib/companies.js";
 import { fetchTrustpilotSummary } from "./trustpilot.js";
 
@@ -74,6 +82,55 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
         return send(200, { ok: true, sqlite: !!store.useSqlite });
       }
 
+      // Mobile share-to-check: only the origin is retained/queried; no page scan.
+      if (req.method === "GET" && url.pathname === "/v1/mobile-check") {
+        if (limited("read", ip, readLimit)) return send(429, { error: "rate limited" });
+        let shop;
+        try { shop = new URL(url.searchParams.get("url") || ""); } catch { return send(400, { error: "invalid shop URL" }); }
+        if (!/^https?:$/.test(shop.protocol) || shop.username || shop.password || isSearchEngine(shop.hostname))
+          return send(400, { error: "share a shop website URL" });
+        const domain = registrableDomain(shop.hostname);
+        if (!Store.cleanDomain(domain)) return send(400, { error: "invalid shop domain" });
+        const cacheKey = "mobile:" + domain;
+        let rec = serverCache.get(cacheKey);
+        if (!rec || Date.now() - rec.at >= 6 * 3600 * 1000) {
+          const [age, arch, sb] = await Promise.allSettled([
+            domainAge(domain), firstArchived(domain), sbKey ? safeBrowsing(`https://${domain}/`, sbKey) : Promise.resolve(null)
+          ]);
+          rec = { at: Date.now(), data: {
+            signals: [...(age.status === "fulfilled" ? age.value : []), ...(sb.status === "fulfilled" ? sb.value?.signals || [] : [])],
+            registered: age.status === "fulfilled" ? age.value[0]?.since || null : null,
+            archived: arch.status === "fulfilled" ? arch.value : null,
+            flagged: sb.status === "fulfilled" && !!sb.value?.flagged
+          } };
+          serverCache.set(cacheKey, rec);
+        }
+        const network = rec.data;
+        const summary = store.summary(domain);
+        const tpKeyCache = "tp:" + domain;
+        let reviews = serverCache.get(tpKeyCache);
+        if (!reviews || Date.now() - reviews.at >= 6 * 3600 * 1000) {
+          reviews = { at: Date.now(), data: await fetchTrustpilotSummary(domain, tpKey) };
+          serverCache.set(tpKeyCache, reviews);
+        }
+        const signals = [
+          ...urlSignals(shop.origin + "/"), ...network.signals, ...historySignals(network), ...buyerSignals(summary)
+        ];
+        const report = buildReport({ url: shop.origin + "/", domain, signals, reviews: reviews.data,
+          links: reviewLinks(domain), flagged: network.flagged, feedback: buyerFeedback(summary),
+          buyerTotal: summary.hidden ? 0 : summary.total,
+          buyerOutcomes: summary.hidden ? null : summary.outcomes || null,
+          sixMonthNonDelivery: summary.sixMonthNonDelivery || 0,
+          sixMonthNotMatched: summary.sixMonthNotMatched || 0,
+          sixMonthDelivered: summary.sixMonthDelivered || 0,
+          sixMonthObservedTotal: summary.sixMonthObservedTotal || 0,
+          sixMonthOutcomes: summary.sixMonthOutcomes || null,
+          minReports: summary.minReports });
+        report.history = historyLines(network);
+        report.analysisScope = "Domain and server data only; page content and checkout were not scanned.";
+        return send(200, report, { "cache-control": "no-store" });
+      }
+
       // Endpoint to issue a cryptographically signed client installation credential
       if (req.method === "POST" && url.pathname === "/v1/register") {
         if (limited("reg", ip, 15)) return send(429, { error: "rate limited" });
@@ -134,6 +191,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
         const rawDomain = url.searchParams.get("domain");
         const clean = Store.cleanDomain(rawDomain);
         if (!clean) return send(400, { error: "invalid domain" });
+        const fresh = url.searchParams.get("fresh") === "1";
 
         const summary = store.summary(clean);
         const ver = store.getMerchantVerification(clean);
@@ -150,7 +208,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
         if (sbKey) {
           const sbCacheKey = "sb:" + clean;
           const cachedSb = serverCache.get(sbCacheKey);
-          if (cachedSb && Date.now() - cachedSb.at < 6 * 3600 * 1000) {
+          if (!fresh && cachedSb && Date.now() - cachedSb.at < 6 * 3600 * 1000) {
             sbResult = cachedSb.data;
           } else {
             try {
@@ -167,7 +225,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
         if (chKey && companyNumber) {
           const coCacheKey = "co:" + companyNumber;
           const cachedCo = serverCache.get(coCacheKey);
-          if (cachedCo && Date.now() - cachedCo.at < 24 * 3600 * 1000) {
+          if (!fresh && cachedCo && Date.now() - cachedCo.at < 24 * 3600 * 1000) {
             companyResult = cachedCo.data;
           } else {
             try {
@@ -184,7 +242,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
         let tpResult = null;
         const tpCacheKey = "tp:" + clean;
         const cachedTp = serverCache.get(tpCacheKey);
-        if (cachedTp && Date.now() - cachedTp.at < 6 * 3600 * 1000) {
+        if (!fresh && cachedTp && Date.now() - cachedTp.at < 6 * 3600 * 1000) {
           tpResult = cachedTp.data;
         } else {
           try {
@@ -202,7 +260,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
           safeBrowsing: sbResult,
           company: companyResult,
           reviews: tpResult
-        }, { "cache-control": "public, max-age=60" });
+        }, { "cache-control": fresh ? "no-store" : "public, max-age=60" });
       }
 
       if (req.method === "GET" && url.pathname === "/v1/export/orders") {
@@ -219,6 +277,12 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
           return res.end(header + lines);
         }
         return send(200, { ok: true, total: rows.length, rows });
+      }
+
+      if (req.method === "GET" && url.pathname === "/v1/export/feedback") {
+        if (!adminToken || bearer !== adminToken) return send(401, { error: "unauthorized" });
+        const rows = store.feedbackDetails(url.searchParams.get("domain"));
+        return send(200, { total: rows.length, rows }, { "cache-control": "no-store" });
       }
 
       if (req.method === "GET" && url.pathname === "/v1/summary") {
@@ -287,7 +351,7 @@ export function createServer(store, { rateLimit = 20, readLimit = 300, trustProx
   return srv;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const env = process.env;
   if (env.NODE_ENV === "production" && (!env.REPORT_SALT || !env.ADMIN_TOKEN || !env.CORS_ORIGIN || env.CORS_ORIGIN === "*")) {
     console.error("REPORT_SALT, ADMIN_TOKEN and a restricted CORS_ORIGIN are required in production");
@@ -318,6 +382,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
   srv.listen(Number(env.PORT || 8787), env.HOST || "0.0.0.0", () => {
-    console.log(`TrustCheck report server on :${env.PORT || 8787} (SQLite: ${store.useSqlite})`);
+    console.log(`BeforeYouBuy report server on :${env.PORT || 8787} (SQLite: ${store.useSqlite})`);
   });
 }

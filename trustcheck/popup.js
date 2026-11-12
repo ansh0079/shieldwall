@@ -92,7 +92,7 @@ function render(r) {
   $("loading").hidden = true;
   if (!r) {
     $("loading").hidden = false;
-    $("loading").textContent = "Open a website to check it.";
+    $("loading").textContent = "Open a retail shopping site to see its seller check.";
     return;
   }
   if (r.neutral) {
@@ -106,9 +106,8 @@ function render(r) {
 
   if (!r.backendOn) {
     $("rs1").hidden = true;
-    $("rs2").hidden = true;
     $("rmsg").hidden = false;
-    $("rmsg").textContent = "Set a report server in Options to share and see community buyer reports.";
+    $("rmsg").textContent = "Start the local report server or set a report server in Options to share buyer feedback.";
   }
 
   $("ring").className = r.verdict;
@@ -127,8 +126,8 @@ function render(r) {
   const totalChecks = r.analysis?.totalChecks ?? 0;
   const checkedAt = new Date(r.checkedAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   $("analysisMeta").textContent = totalChecks
-    ? `${checked} of ${totalChecks} evidence areas checked · Updated ${checkedAt}`
-    : `Updated ${checkedAt}`;
+    ? `${checked} of ${totalChecks} evidence areas checked · Viewed ${checkedAt}`
+    : `Viewed ${checkedAt}`;
 
   const outcomes = r.outcomeSummary;
   if (outcomes?.total > 0) {
@@ -137,7 +136,8 @@ function render(r) {
     const items = [
       ["Delivered", outcomes.delivered, outcomes.deliveredPercent, "good"],
       ["Not delivered", outcomes.nonDelivery, outcomes.nonDeliveryPercent, "bad"],
-      ["Did not match", outcomes.notMatched, outcomes.notMatchedPercent, "warn"]
+      ["Did not match", outcomes.notMatched, outcomes.notMatchedPercent, "warn"],
+      ["Other problems", outcomes.otherProblems, outcomes.otherProblemsPercent, "warn"]
     ];
     for (const [label, count, percent, status] of items) {
       const item = document.createElement("div");
@@ -146,7 +146,7 @@ function render(r) {
       const name = document.createElement("span"); name.textContent = `${label} (${count})`;
       item.append(value, name); $("outcomeStats").append(item);
     }
-    $("outcomeNote").textContent = `${outcomes.total} outcomes followed an order confirmation observed by TrustCheck. Small samples may be unrepresentative.`;
+    $("outcomeNote").textContent = `${outcomes.total} outcomes followed an order confirmation observed by BeforeYouBuy. Small samples may be unrepresentative.`;
   } else {
     $("outcomes").hidden = true;
   }
@@ -188,9 +188,12 @@ function render(r) {
     tp.className = "trustpilot";
     $("reviews").append(tp);
   }
+  const votes = r.buyerOutcomes;
+  $("buyerVotes").hidden = !votes;
+  if (votes) $("buyerVotes").textContent = `BeforeYouBuy buyers (last 30 days): ${votes.ok} good experience, ${votes.problem} problem, ${votes.never} never arrived. ${r.buyerTotal} reports; self-reported unless marked confirmation-observed.`;
 
   $("proof").textContent = r.purchase && !r.purchase.reported
-    ? `TrustCheck observed an order confirmation on ${new Date(r.purchase.at).toLocaleDateString()}. The date and optional order amount stay on this device.`
+    ? `BeforeYouBuy observed an order confirmation on ${new Date(r.purchase.at).toLocaleDateString()}. The date and optional order amount stay on this device.`
     : "This will be marked as an unverified community report.";
 
   // Key Findings vs Optional Configuration notices
@@ -252,40 +255,46 @@ $("opts").onclick = (e) => {
 };
 ask("get");
 
-// Two-step buyer reporting
-for (const b of document.querySelectorAll("#rs1 button")) {
+// One-click buyer reporting; issue tags can be selected beforehand.
+for (const [k, label] of Object.entries(TAGS)) {
+  const c = document.createElement("button");
+  c.type = "button";
+  c.textContent = label;
+  c.onclick = () => {
+    picked.has(k) ? picked.delete(k) : picked.add(k);
+    c.classList.toggle("on");
+  };
+  $("chips").append(c);
+}
+for (const b of document.querySelectorAll("#rs1 button[data-o]")) {
   b.onclick = () => {
     outcome = b.dataset.o;
-    if (outcome === "ok") return send();
-    $("rs1").hidden = true;
-    $("rs2").hidden = false;
-    $("chips").textContent = "";
-    for (const [k, label] of Object.entries(TAGS)) {
-      const c = document.createElement("button");
-      c.type = "button";
-      c.textContent = label;
-      c.onclick = () => {
-        picked.has(k) ? picked.delete(k) : picked.add(k);
-        c.classList.toggle("on");
-      };
-      $("chips").append(c);
-    }
+    send();
   };
 }
 
-$("send").onclick = send;
-
 async function send() {
+  if (!current || !outcome || $("rs1").dataset.sending === "true") return;
+  $("rs1").dataset.sending = "true";
+  for (const button of $("rs1").querySelectorAll("button[data-o]")) button.disabled = true;
   const purchaseId = current?.purchase && !current.purchase.reported ? current.purchase.id : null;
-  const res = await chrome.runtime.sendMessage({
-    type: "submitReport",
-    domain: current.domain,
-    outcome,
-    tags: [...picked],
-    purchaseId
-  });
-  $("rs1").hidden = true;
-  $("rs2").hidden = true;
-  $("rmsg").hidden = false;
-  $("rmsg").textContent = res?.ok ? "Thanks — your report helps other shoppers." : "Could not send: " + (res?.error || "unknown error");
+  try {
+    const res = await chrome.runtime.sendMessage({
+      type: "submitReport",
+      domain: current.domain,
+      outcome,
+      tags: [...picked],
+      details: $("reportDetails").value.trim(),
+      purchaseId
+    });
+    if (res?.ok) $("rs1").hidden = true;
+    $("rmsg").hidden = false;
+    $("rmsg").textContent = res?.ok ? "Thanks — your feedback helps other shoppers." : "Could not send: " + (res?.error || "unknown error");
+  } catch (error) {
+    $("rmsg").hidden = false;
+    $("rmsg").textContent = "Could not send: " + (error?.message || "connection error");
+  } finally {
+    $("rs1").dataset.sending = "false";
+    for (const button of $("rs1").querySelectorAll("button[data-o]")) button.disabled = false;
+  }
 }

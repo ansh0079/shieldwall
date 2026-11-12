@@ -3,14 +3,15 @@
 (() => {
   const SEARCH = /(^|\.)(google|bing|duckduckgo|yahoo|ecosia|startpage|brave|yandex|baidu|qwant)\.[a-z.]+$/i;
   if (!SEARCH.test(location.hostname)) return;
-  // Diagnostic marker: check `document.documentElement.dataset.trustcheckHover` in the page console.
-  document.documentElement.dataset.trustcheckHover = window.top === window ? "active" : "active-frame";
-  console.debug("[TrustCheck] hover script active", window.top === window ? "(top page)" : "(frame)", location.href.slice(0, 80));
-
   const PARAMS = ["url", "q", "adurl", "dest", "dest_url", "u", "ued"];
   const explicitSellerUrl = globalThis.TrustCheckSearch?.explicitSellerUrl || (() => null);
   const sameProduct = globalThis.TrustCheckSearch?.sameProduct || (() => false);
   const visibleSellerName = globalThis.TrustCheckSearch?.visibleSellerName || (() => null);
+  const isShoppingResultCard = globalThis.TrustCheckSearch?.isShoppingResultCard || (() => false);
+  const searchResultsPage = /\/(search|shopping)(\/|$)/i.test(location.pathname) ||
+    ["q", "p", "query"].some((key) => new URLSearchParams(location.search).has(key));
+  if (!searchResultsPage) return;
+  document.documentElement.dataset.trustcheckHover = window.top === window ? "active" : "active-frame";
   // Real destination of a result link, unwrapping the engine's redirect wrappers.
   function destination(a) {
     let u; try { u = new URL(a.href, location.href); } catch { return null; }
@@ -58,17 +59,24 @@
 
   // Smallest card-sized ancestor of the hovered element that holds a resolvable seller link.
   function findCard(el) {
+    if (el.closest?.('form,[role="listbox"],[role="option"],[role="combobox"],[aria-autocomplete]')) return null;
     let n = el, unresolved = null;
     for (let i = 0; n && n !== document.body && i < 8; i++, n = n.parentElement) {
       const r = n.getBoundingClientRect();
       if (r.width > 560 || r.height > 720) break;                       // too big: a whole grid, not one result
+      if (!isShoppingResultCard(n.innerText || n.textContent)) continue;
       const links = n.matches("a[href]") ? [n] : [...n.querySelectorAll("a[href]")];
       for (const a of links) { const d = destination(a); if (d) return { card: widen(n, d), url: d }; }
       const visibleDomain = explicitSellerUrl(n.innerText || n.textContent);
       if (visibleDomain) return { card: widen(n, visibleDomain), url: visibleDomain };
       const panelUrl = panelSeller(n);
       if (panelUrl) return { card: widen(n, panelUrl), url: panelUrl };
-      if (links.length && !unresolved) unresolved = { card: n, url: null, hrefs: links.slice(0, 5).map((a) => a.href) };
+      // Keep the broadest single-product card. The image link often sits inside a
+      // tiny child whose text omits the visible seller name.
+      if (links.length || unresolved) unresolved = {
+        card: n, url: null,
+        hrefs: links.length ? links.slice(0, 5).map((a) => a.href) : unresolved.hrefs
+      };
     }
     return unresolved;     // card found, but no seller website could be read from its links
   }
@@ -110,6 +118,7 @@
     for (const h of r.history || []) pts.push({ s: "info", t: h });
     if (r.verdict === "unverified") pts.push({ s: "warn", t: "No reviews, buyer reports or domain history found for this shop" });
     if (r.buyerTotal) pts.push({ s: "info", t: `Based on ${r.buyerTotal} buyer reports (30 days)` });
+    if (r.buyerOutcomes) pts.push({ s: "info", t: `${r.buyerOutcomes.ok} good, ${r.buyerOutcomes.problem} problems, ${r.buyerOutcomes.never} never arrived` });
     for (const f of r.feedback || []) pts.push({ s: "bad", t: `${f.count} buyers: ${f.label}` });
     if (Number.isFinite(r.reviews?.score) && Number.isFinite(r.reviews?.count)) pts.push({ s: r.reviews.score >= 4 ? "good" : r.reviews.score >= 3 ? "warn" : "bad", t: `${r.reviews.source} ${r.reviews.score.toFixed(1)}/5 from ${r.reviews.count.toLocaleString()} reviews` });
     for (const th of r.reviews?.themes || []) pts.push({ s: "bad", t: `${th.count} of ${r.reviews.sample} recent reviews: ${th.label}` });
@@ -127,7 +136,8 @@
       .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin:10px 0 3px}
       .p{display:flex;gap:6px;margin:4px 0}.p i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px;background:#9ca3af}
       .good i{background:#16a34a}.warn i{background:#d97706}.bad i{background:#dc2626}.n{color:#6b7280;font-size:11px;margin-top:8px}.m{color:#374151;line-height:1.4}
-      .tp{display:block;margin-top:10px;padding:7px 9px;border-radius:8px;background:#4b5563;color:#fff;text-align:center;text-decoration:none;font-weight:700;pointer-events:auto}.tp:hover{background:#374151}`;
+      .tp{display:block;margin-top:10px;padding:7px 9px;border-radius:8px;background:#4b5563;color:#fff;text-align:center;text-decoration:none;font-weight:700;pointer-events:auto}.tp:hover{background:#374151}
+      .sources{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}.sources a{font-size:11px;color:#1f2937;border:1px solid #d1d5db;border-radius:6px;padding:5px;text-decoration:none}.sources a:hover{background:#f3f4f6}`;
     const c = document.createElement("div"); c.className = "c";
     build(c); shadow.append(st, c);
     host.style.display = "block";
@@ -149,13 +159,25 @@
       tp.href = `https://www.trustpilot.com/review/${encodeURIComponent(domain)}`;
       tp.target = "_blank"; tp.rel = "noopener noreferrer";
       c.append(tp);
-      c.append(el("div", "n", "Quick check from the seller's web address. Open the shop for a full check."));
+      const sources = el("div", "sources");
+      for (const [name, label] of [["Google: reviews", "Google reviews ↗"], ["ScamAdviser", "ScamAdviser ↗"], ["Who.is record", "Who.is record ↗"]]) {
+        const source = r.links?.find((item) => item.name === name);
+        if (!source?.url) continue;
+        const link = el("a", "", label); link.href = source.url; link.target = "_blank"; link.rel = "noopener noreferrer";
+        sources.append(link);
+      }
+      c.append(sources);
+      const shop = el("a", "tp", "Open shop for full check & feedback ↗");
+      shop.href = r.url;
+      shop.target = "_blank"; shop.rel = "noopener noreferrer";
+      c.append(shop);
+      c.append(el("div", "n", "On the shop page, click BeforeYouBuy in Chrome to give one-click buyer feedback."));
     });
   }
   function note(rect, text) { show(rect, (c) => c.append(el("div", "m", text))); }
   function unresolvedNote(rect, card) {
     show(rect, (c) => {
-      c.append(el("div", "m", "This listing doesn't expose a seller website. Open it and TrustCheck will use the first shop shown in the product panel."));
+      c.append(el("div", "m", "Google has not exposed this seller's shop address in the listing. Domain age, a seller score and buyer feedback need the shop address. Open the listing, then follow its seller/shop link; click BeforeYouBuy on the shop page to leave feedback."));
       const seller = visibleSellerName(card.innerText || card.textContent);
       if (!seller) return;
       const tp = el("a", "tp", `Search ${seller} on Trustpilot ↗`);
@@ -181,8 +203,8 @@
   document.addEventListener("mouseover", (e) => {
     try { onHover(e); }
     catch (err) {
-      console.warn("[TrustCheck] hover error:", err);
-      try { note(e.target.getBoundingClientRect(), "TrustCheck error: " + String(err?.message || err).slice(0, 150)); } catch { /* ignore */ }
+      console.warn("[BeforeYouBuy] hover error:", err);
+      try { note(e.target.getBoundingClientRect(), "BeforeYouBuy error: " + String(err?.message || err).slice(0, 150)); } catch { /* ignore */ }
     }
   }, true);
 
@@ -191,7 +213,7 @@
     if (e.altKey) {
       clearTimeout(showTimer); current = null;
       const rect = (e.target.closest?.("a,li,article,div") || e.target).getBoundingClientRect();
-      return show(rect, (c) => { c.append(el("div", "v", "TrustCheck debug")); for (const l of debugCard(e.target)) c.append(el("div", "d", l)); });
+      return show(rect, (c) => { c.append(el("div", "v", "BeforeYouBuy debug")); for (const l of debugCard(e.target)) c.append(el("div", "d", l)); });
     }
     const hit = findCard(e.target);
     clearTimeout(showTimer);
@@ -203,7 +225,7 @@
       current = hit.card;
       const rect = hit.card.getBoundingClientRect();
       if (!hit.url) {
-        console.debug("[TrustCheck] could not read a seller website from this result. Links seen:", hit.hrefs);
+        console.debug("[BeforeYouBuy] could not read a seller website from this result. Links seen:", hit.hrefs);
         return unresolvedNote(rect, hit.card);
       }
       let domain; try { domain = new URL(hit.url).hostname.replace(/^www\./, ""); } catch { return; }

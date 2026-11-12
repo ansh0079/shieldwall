@@ -37,5 +37,9 @@
     return null;
   }
 
-  globalThis.TrustCheckSearch = Object.freeze({ explicitSellerUrl, sameProduct, visibleSellerName });
+  function isShoppingResultCard(text) {
+    return /(?:[£$€]\s?\d[\d,.]*|\d[\d,.]*\s?(?:GBP|USD|EUR)\b)/i.test(String(text || ""));
+  }
+
+  globalThis.TrustCheckSearch = Object.freeze({ explicitSellerUrl, sameProduct, visibleSellerName, isShoppingResultCard });
 })();

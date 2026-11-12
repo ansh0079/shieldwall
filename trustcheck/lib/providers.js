@@ -52,8 +52,7 @@ export function reviewLinks(domain) {
   return [
     { name: "Trustpilot", url: `https://www.trustpilot.com/review/${d}` },
     { name: "ScamAdviser", url: `https://www.scamadviser.com/check-website/${d}` },
-    { name: "Reddit discussions", url: `https://www.reddit.com/search/?q=${d}%20scam%20OR%20legit` },
-    { name: "Google: reviews", url: `https://www.google.com/search?q=${d}+reviews+scam` },
+    { name: "Google: reviews", url: `https://www.google.com/search?q=${encodeURIComponent(`${d} reviews`)}` },
     { name: "Who.is record", url: `https://who.is/whois/${d}` }
   ];
 }

@@ -1,7 +1,11 @@
-# TrustCheck
+# BeforeYouBuy
 
 A Manifest V3 browser extension (Chrome/Edge/Brave) that tells online shoppers, in real time,
 whether the store they're on can be trusted. Separate from QuietBrowse; shares none of its code.
+
+The extension shows scores and runs domain checks only after the page shows retail, checkout, or order activity. It clears its badge on other sites. Shopping search results can still show seller checks when you hover a result.
+
+An Android share-to-check beta project is in [android/](android/README.md). It accepts shop links shared from mobile Chrome and uses the same report server. Mobile checks are limited to domain and server data because the app does not inspect Chrome pages.
 
 ## What it checks
 | Signal | Source | Needs key |
@@ -13,9 +17,9 @@ whether the store they're on can be trusted. Separate from QuietBrowse; shares n
 | Malware & phishing blocklists | Google Safe Browsing | yes (free) |
 | Seller-level rating published in Schema.org markup, clearly labelled merchant-claimed | local page scan | no |
 | UK company number in footer verified (exists, active, age, name matches) | Companies House API | yes (free) |
-| Direct seller-profile links to Trustpilot, ScamAdviser, Reddit, Google, WHOIS | deep links | no |
+| Direct seller-profile links to Trustpilot, ScamAdviser, Google, WHOIS | deep links | no |
 
-**Hover cards:** on Google/Bing/DuckDuckGo results, hovering a result shows the seller site's quick rating in a side card (domain of the hovered result only; link redirects are unwrapped). Not verified against live Google Shopping markup.
+**Hover cards:** on Google/Bing/DuckDuckGo results, hovering a priced shopping result shows the seller site's quick rating in a side card (domain of the hovered result only; link redirects are unwrapped). Not verified against live Google Shopping markup.
 
 Score = 50 + sum of signal points, clamped to 0-100. 70+ trusted, 40-69 caution, below 40 risky.
 A Safe Browsing hit caps the score at 10. Risky pages get an in-page warning banner.
