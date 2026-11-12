@@ -15,18 +15,11 @@ const NET_CACHE_VERSION = 2; // v2 removes paid Trustpilot API data from cached 
 const pageScans = new Map(); // tabId -> scan
 const buyerCache = new Map(); // domain -> {at,sum}
 const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
-let localBackend = { at: 0, available: false };
+const DEFAULT_BACKEND = "https://trustcheck.soloinvestor-ai.com";
 
 async function reportBackend() {
   const { backend = "" } = await chrome.storage.local.get({ backend: "" });
-  if (backend) return backend;
-  if (Date.now() - localBackend.at > 30000) {
-    try {
-      const res = await fetch("http://localhost:8787/healthz", { signal: AbortSignal.timeout(1200) });
-      localBackend = { at: Date.now(), available: res.ok && !!(await res.json()).ok };
-    } catch { localBackend = { at: Date.now(), available: false }; }
-  }
-  return localBackend.available ? "http://localhost:8787" : "";
+  return backend || DEFAULT_BACKEND;
 }
 
 async function settings() {

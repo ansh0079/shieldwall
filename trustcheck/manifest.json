@@ -17,7 +17,7 @@
     "https://safebrowsing.googleapis.com/*",
     "https://api.trustpilot.com/*",
     "https://api.company-information.service.gov.uk/*",
-    "http://localhost:8787/*"
+    "https://trustcheck.soloinvestor-ai.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*"

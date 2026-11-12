@@ -16,7 +16,7 @@
     "https://safebrowsing.googleapis.com/*",
     "https://api.trustpilot.com/*",
     "https://api.company-information.service.gov.uk/*",
-    "http://localhost:8787/*"
+    "https://trustcheck.soloinvestor-ai.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*"
@@ -91,7 +91,10 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "trustcheck@shieldwall.dev",
-      "strict_min_version": "115.0"
+      "strict_min_version": "115.0",
+      "data_collection_permissions": {
+        "required": ["browsingActivity", "websiteContent"]
+      }
     }
   }
 }
