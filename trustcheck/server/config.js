@@ -52,6 +52,8 @@ export function loadConfig(env = process.env) {
     if (production && env.ALLOWED_ORIGINS === undefined) errors.push('ALLOWED_ORIGINS is required in production (comma-separated, e.g. chrome-extension://<your extension id>; use "none" for no browser origins)');
     c.allowedOrigins = env.ALLOWED_ORIGINS === undefined && production ? new Set() : parseOrigins(env.ALLOWED_ORIGINS ?? "*", { production });   // (the "missing" case is already reported above)
   } catch (e) { errors.push(`ALLOWED_ORIGINS: ${e.message}`); c.allowedOrigins = new Set(); }
+  // Firefox install origins are random UUIDs; this explicit opt-in accepts any moz-extension://<uuid>. Default off.
+  c.allowMozExtensionOrigins = env.ALLOW_MOZ_EXTENSION_ORIGINS === "true";
 
   // Admin tokens: "name:token,name2:token2" (named so the audit log records WHO acted) or a single ADMIN_TOKEN.
   c.adminTokens = [];

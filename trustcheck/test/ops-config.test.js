@@ -43,6 +43,26 @@ test("origins: wildcard banned in production, exact origins only, 'none' allowed
   assert.deepEqual(cfg({ ALLOWED_ORIGINS: "none" }).errors, []); assert.equal(cfg({ ALLOWED_ORIGINS: "none" }).config.allowedOrigins.size, 0);
   assert.equal(loadConfig({}).config.allowedOrigins, "*");
 });
+test("moz-extension origins are an explicit opt-in and must be a UUID", () => {
+  const uuid = "moz-extension://550e8400-e29b-41d4-a716-446655440000";
+  const set = parseOrigins("https://trustcheck.soloinvestor-ai.com");
+  assert.equal(cfg().config.allowMozExtensionOrigins, false);
+  assert.equal(cfg({ ALLOW_MOZ_EXTENSION_ORIGINS: "true" }).config.allowMozExtensionOrigins, true);
+  assert.equal(cfg({ ALLOW_MOZ_EXTENSION_ORIGINS: "1" }).config.allowMozExtensionOrigins, false);
+  assert.equal(cfg({ ALLOW_MOZ_EXTENSION_ORIGINS: "TRUE" }).config.allowMozExtensionOrigins, false);
+  assert.ok(!originAllowed(uuid, set));
+  assert.ok(!originAllowed(uuid, set, { allowMozExtension: false }));
+  assert.ok(originAllowed(uuid, set, { allowMozExtension: true }));
+  assert.ok(originAllowed(uuid.toUpperCase(), set, { allowMozExtension: true }));
+  assert.ok(!originAllowed("moz-extension://not-a-uuid", set, { allowMozExtension: true }));
+  assert.ok(!originAllowed("moz-extension://550e8400e29b41d4a716446655440000", set, { allowMozExtension: true }));
+  assert.ok(!originAllowed("moz-extension://550e8400-e29b-41d4-a716-446655440000/path", set, { allowMozExtension: true }));
+  assert.ok(!originAllowed("moz-extension://550e8400-e29b-41d4-a716-446655440000:443", set, { allowMozExtension: true }));
+  assert.ok(!originAllowed("chrome-extension://550e8400-e29b-41d4-a716-446655440000", set, { allowMozExtension: true }));
+  assert.ok(!originAllowed("https://550e8400-e29b-41d4-a716-446655440000", set, { allowMozExtension: true }));
+  assert.ok(originAllowed("https://trustcheck.soloinvestor-ai.com", set, { allowMozExtension: true }));
+  assert.ok(!originAllowed(undefined, set, { allowMozExtension: true }));
+});
 test("admin tokens: named, long, unique; production warns when the admin API is open to every network", () => {
   assert.match(cfg({ ADMIN_TOKENS: "alice:short" }).errors.join(), /shorter than 24/);
   assert.match(cfg({ ADMIN_TOKENS: `Alice!:${ADM}` }).errors.join(), /name:token/);

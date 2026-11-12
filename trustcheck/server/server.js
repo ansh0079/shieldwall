@@ -66,7 +66,7 @@ export function createServer(store, options = {}) {
     const p = url.pathname;
     let route = "unmatched", status = 0;
     const origin = req.headers.origin;
-    const originOk = origin === undefined || originAllowed(origin, o.allowedOrigins);
+    const originOk = origin === undefined || originAllowed(origin, o.allowedOrigins, { allowMozExtension: !!o.allowMozExtensionOrigins });
 
     const send = (code, obj, extra = {}, raw = null) => {
       let body = raw ?? JSON.stringify(obj);

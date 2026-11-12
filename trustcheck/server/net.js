@@ -74,4 +74,13 @@ export function parseOrigins(text, { production = false } = {}) {
   }
   return set;
 }
-export const originAllowed = (origin, allowed) => allowed === "*" || (typeof origin === "string" && allowed.has(origin.toLowerCase()));
+// Firefox MV3 background fetches send Origin: moz-extension://<per-install UUID>, which cannot be pre-listed.
+// Off unless the caller passes allowMozExtension: the host must be a UUID (8-4-4-4-12 hex), nothing else.
+const MOZ_EXTENSION_ORIGIN_RE = /^moz-extension:\/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isMozExtensionOrigin = (origin) => typeof origin === "string" && MOZ_EXTENSION_ORIGIN_RE.test(origin);
+export function originAllowed(origin, allowed, { allowMozExtension = false } = {}) {
+  if (allowed === "*") return true;
+  if (typeof origin !== "string") return false;
+  if (allowed.has(origin.toLowerCase())) return true;
+  return allowMozExtension && isMozExtensionOrigin(origin);
+}

@@ -21,6 +21,7 @@ With `NODE_ENV=production` (the image default) the server **refuses to start** w
 |---|---|
 | `REPORT_SALT`, `CREDENTIAL_SECRET` | required in production, 32+ chars |
 | `ALLOWED_ORIGINS` | comma list of allowed browser origins (required in production) |
+| `ALLOW_MOZ_EXTENSION_ORIGINS` | set to `true` to accept any `moz-extension://<uuid>` Origin (Firefox per-install IDs). Off by default. |
 | `TRUSTED_PROXIES` | CIDR list of reverse proxies whose `X-Forwarded-For` is trusted |
 | `ADMIN_TOKENS`, `ADMIN_CIDRS` | named moderator tokens (24+ chars); optional network allow-list for `/admin/*` |
 | `DATABASE_FILE` (`/data/data.db`), `BACKUP_DIR` (`/data/backups`) | database and backups; `BACKUP_EVERY_HOURS`, `BACKUP_KEEP` control the schedule |

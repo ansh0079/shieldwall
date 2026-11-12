@@ -87,6 +87,25 @@ test("CORS 'none' refuses every browser origin; '*' (development) allows all", a
   await withServer({ allowedOrigins: new Set() }, async (s) => { assert.equal((await s.call("/healthz", { headers: { origin: "https://a.example" } })).status, 403); assert.equal((await s.call("/healthz")).status, 200); });
   await withServer({ allowedOrigins: "*" }, async (s) => assert.equal((await s.call("/healthz", { headers: { origin: "https://a.example" } })).headers.get("access-control-allow-origin"), "*"));
 });
+test("CORS: ALLOW_MOZ_EXTENSION_ORIGINS accepts only a moz-extension:// UUID", () => withServer({
+  allowedOrigins: new Set(["https://trustcheck.soloinvestor-ai.com"]), allowMozExtensionOrigins: true,
+}, async (s) => {
+  const moz = "moz-extension://550e8400-e29b-41d4-a716-446655440000";
+  const ok = await s.call("/v1/challenge", { headers: { origin: moz } });
+  assert.equal(ok.status, 200); assert.equal(ok.headers.get("access-control-allow-origin"), moz); assert.equal(ok.headers.get("vary"), "Origin");
+  assert.equal((await s.call("/v1/challenge", { headers: { origin: moz.toUpperCase() } })).status, 200);
+  assert.equal((await s.call("/v1/challenge", { headers: { origin: "moz-extension://not-a-uuid" } })).status, 403);
+  assert.equal((await s.call("/v1/challenge", { headers: { origin: "https://evil.example" } })).status, 403);
+  const site = await s.call("/v1/challenge", { headers: { origin: "https://trustcheck.soloinvestor-ai.com" } });
+  assert.equal(site.status, 200); assert.equal(site.headers.get("access-control-allow-origin"), "https://trustcheck.soloinvestor-ai.com");
+  assert.equal((await s.call("/v1/challenge")).status, 200);
+}));
+test("CORS: a moz-extension UUID is refused when the opt-in is off", () => withServer({
+  allowedOrigins: new Set(["https://trustcheck.soloinvestor-ai.com"]),
+}, async (s) => {
+  assert.equal((await s.call("/v1/challenge", { headers: { origin: "moz-extension://550e8400-e29b-41d4-a716-446655440000" } })).status, 403);
+  assert.equal((await s.call("/v1/challenge")).status, 200);
+}));
 test("forwarded addresses are believed only from a trusted proxy, read right to left, and never from anyone else", async () => {
   // Behind a trusted proxy (127.0.0.1): two different real clients get separate write budgets...
   await withServer({ rateLimit: 1, trustedProxies: parseCidrList("127.0.0.1/32") }, async (s) => {
