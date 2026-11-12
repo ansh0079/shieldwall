@@ -7,7 +7,7 @@ Run this checklist **before every store release** on a **packed** build (Load un
 **Priority:**
 - **P0** — Login, checkout, or payment broken; data loss; extension crash loop
 - **P1** — Core feature unusable (video won't play, page blank, bank app errors)
-- **P2** — Cosmetic glitch, minor annoyance, fixable via "Fix this site"
+- **P2** — Cosmetic glitch, minor annoyance, fixable via "Fix page display"
 
 ---
 
@@ -57,7 +57,7 @@ Run this checklist **before every store release** on a **packed** build (Load un
 | wellsfargo.com | | | | | |
 | coinbase.com | | | | | |
 
-If banking breaks: verify **Fix this site** restores the page after reload.
+If banking breaks: try **Fix page display**, then verify the page after reload.
 
 ---
 
@@ -67,8 +67,8 @@ If banking breaks: verify **Fix this site** restores the page after reload.
 |------|------|-------|
 | Popup opens, favicon + trust score show | | |
 | Toolbar badge increments on tracker-heavy site | | |
-| **Fix this site** pauses + saves report | | |
-| Reload after Fix restores broken page | | |
+| **Fix page display** pauses page hiding and scriptlets, keeps network blocking, and can save a local report | | |
+| Restore page protection in Settings → Site rules, then reload | | |
 | Site mode: Allow ads (trackers still blocked) | | |
 | Settings → Export site reports JSON | | |
 | Filter update (Settings → Update now) completes | | |
@@ -97,7 +97,7 @@ If banking breaks: verify **Fix this site** restores the page after reload.
 
 ## If something breaks during QA
 
-1. Click **Fix this site** in the popup → reload
+1. Click **Fix page display** in the popup and check the page after it reloads
 2. Export report from Settings → Site reports
 3. File issue with domain, URL, steps, and exported JSON
 4. Add domain to site rules if needed until fixed upstream
@@ -106,11 +106,9 @@ If banking breaks: verify **Fix this site** restores the page after reload.
 
 ## Known patterns (expected behaviour, not bugs)
 
-### Cookie banner: CSS hide fires before reject click
+### Cookie banner hidden without a rejection
 
-`cookie_reject.js` attempts a vendor-specific reject click first (`VENDOR_SELECTORS`), then falls back to generic CSS hiding. For CMPs not in `VENDOR_SELECTORS`, the banner is hidden via `display:none` at `document_start` before a reject button can be clicked. The banner disappears (good UX) but no formal consent signal is sent to the CMP. Most CMPs default to rejected when no choice is recorded; a minority may re-show on the next visit.
-
-**Fix:** Add the CMP to `VENDOR_SELECTORS` in `cookie_reject.js` with a working reject selector, then remove the CSS hide rule so the button is visible when the click runs.
+QuietBrowse tries a recognized rejection control before applying its fallback styles. The popup reports the attempt and whether the banner disappeared. Verify the saved choice in the site's consent settings when testing a consent platform.
 
 ### CNAME-uncloaked domain also serves CDN resources
 

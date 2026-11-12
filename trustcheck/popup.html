@@ -1,49 +1,21 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <link rel="stylesheet" href="popup.css">
-  <title>BeforeYouBuy</title>
-</head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="popup.css"></head>
 <body>
   <div id="loading" role="status">Checking this site…</div>
   <main id="main" hidden>
     <header>
-      <div id="ring" aria-label="Risk score ring"><span id="score"></span></div>
-      <div>
-        <div class="title-row">
-          <h1 id="verdict"></h1>
-          <span id="confPill" class="conf-pill"></span>
-        </div>
-        <p id="domain"></p>
-      </div>
+      <div id="ring" role="img"><span id="score"></span></div>
+      <div><h1 id="verdict"></h1><p id="domain"></p><p id="conf" class="small"></p></div>
     </header>
-
-    <h2>Live Seller Analysis</h2>
-    <div id="summaryBox" class="summary-box"></div>
-    <div id="analysisMeta" class="analysis-meta"></div>
-
+    <p id="summary"></p>
+    <h2 id="findingsH">Key findings</h2>
+    <ul id="findings"></ul>
+    <div id="history"></div>
     <div id="reviews"></div>
-    <div id="buyerVotes" class="summary-box" hidden></div>
-
-    <section id="outcomes" class="outcomes" hidden>
-      <div class="outcome-head"><strong>Observed order outcomes</strong><span>Last 6 months</span></div>
-      <div id="outcomeStats" class="outcome-stats"></div>
-      <small id="outcomeNote"></small>
-    </section>
-
-    <h2>Evidence Timeline</h2>
-    <div id="timeline" class="timeline"></div>
-
-    <h2>Key Findings & Evidence</h2>
-    <ul id="signals"></ul>
-
-    <details id="setupDetails" hidden>
-      <summary id="setupSummary">Optional Integrations</summary>
-      <ul id="setupSignals"></ul>
-    </details>
-
-    <h2>One-click seller feedback</h2>
+    <section id="missingWrap" hidden><h2>Not checked</h2><ul id="missing"></ul></section>
+    <h2>Evidence</h2>
+    <div id="groups"></div>
+    <h2>Report your experience</h2>
     <div id="report">
       <div id="rs1">
         <p>How did this seller do?</p>
@@ -63,11 +35,10 @@
 
     <h2>Check Independent Sources</h2>
     <div id="links"></div>
-
-    <footer>
-      <button id="recheck" type="button">Re-check</button>
-      <a href="#" id="opts">Options & Privacy</a>
-    </footer>
+    <details id="setupWrap" hidden><summary>Setup: connect more checks</summary><ul id="setup"></ul></details>
+    <p id="disclaimer" class="small"></p>
+    <p class="small"><a href="#" id="wrong">Report an incorrect result</a> — opens a GitHub issue you can review before posting.</p>
+    <footer><button id="recheck">Re-check</button><span id="fresh" class="small"></span><a href="#" id="opts">Options</a></footer>
   </main>
   <script type="module" src="popup.js"></script>
 </body>

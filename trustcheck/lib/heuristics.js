@@ -12,7 +12,8 @@ const KNOWN_STORES = new Set(BRANDS.map((b) => b + ".com").concat([
   "ebay.co.uk", "ebay.de", "ebay.com.au", "flipkart.com", "apple.com", "target.com",
   "walmart.com", "bestbuy.com", "costco.com", "ikea.com", "etsy.com", "paypal.com"
 ]));
-
+// Marketplaces host many independent sellers: the platform's reputation says nothing about an individual seller.
+const MARKETPLACE_LABELS = new Set(["amazon", "ebay", "etsy", "aliexpress", "alibaba", "temu", "rakuten"]);
 const RISKY_TLDS = new Set(["tk", "ml", "ga", "cf", "gq", "top", "xyz", "click", "shop", "buzz", "icu", "cyou", "rest", "work", "live", "site"]);
 
 const SCAM_AFFIXES = ["store", "shop", "outlet", "official", "sale", "deals", "login", "pay", "verify", "secure", "support", "help", "account", "order"];
@@ -68,8 +69,10 @@ export function urlSignals(urlString) {
   if ((label.match(/-/g) || []).length >= 3 || /\d{4,}/.test(label)) push("pattern", "Spammy domain pattern", "warn", -8, "Many hyphens or long digit runs are common in scam shops.");
   if (host.split(".").length - reg.split(".").length >= 3) push("subdomains", "Unusually deep subdomains", "warn", -8, host);
 
-  if (KNOWN_STORES.has(reg)) {
-    push("known", "Well-known retailer", "good", 20, "Domain matches a major retailer. Marketplace sellers on it still vary - check the seller.");
+  if (KNOWN_STORES.has(reg) && MARKETPLACE_LABELS.has(label)) {
+    push("marketplace", "Marketplace with independent sellers", "info", 0, "Many independent sellers trade here. The marketplace's own reputation does not cover this seller, so TrustCheck gives no positive verdict. Check the seller's own ratings.");
+  } else if (KNOWN_STORES.has(reg)) {
+    push("known", "Well-known retailer", "good", 20, "Domain matches a major retailer.");
   } else {
     for (const brand of BRANDS) {
       if (isLookalike(label, brand)) {

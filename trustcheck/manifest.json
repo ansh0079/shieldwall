@@ -4,6 +4,12 @@
   "version": "0.3.0",
   "description": "Real-time risk assessment, seller reviews and scam warnings for online stores.",
   "minimum_chrome_version": "110",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "storage",
     "tabs",
@@ -25,12 +31,6 @@
   "background": {
     "service_worker": "background.js",
     "type": "module"
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "32": "icons/icon32.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
   },
   "content_scripts": [
     {
@@ -77,11 +77,13 @@
   ],
   "action": {
     "default_title": "BeforeYouBuy",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
-      "32": "icons/icon32.png"
-    },
-    "default_popup": "popup.html"
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "options_page": "options.html"
 }

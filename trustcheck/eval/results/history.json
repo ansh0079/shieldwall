@@ -1,0 +1,113 @@
+[
+ {
+  "version": "0.1.0",
+  "label": "scoring redesign, BEFORE evaluation-driven fixes",
+  "date": "2026-11-09",
+  "corpus": "v1",
+  "commit": "90ba247",
+  "holdout": {
+   "n": 24,
+   "fraud": 12,
+   "legit": 12,
+   "recallAlarm": 0.75,
+   "recallWarn": 1,
+   "fprAlarm": 0,
+   "fprWarn": 0.08333333333333333,
+   "precisionAlarm": 1,
+   "falseReassurance": 0,
+   "ece": 0.14916666666666667,
+   "brier": 0.07001666666666667,
+   "monotone": true,
+   "gapsMissed": 2
+  },
+  "dev": {
+   "n": 46,
+   "fraud": 21,
+   "legit": 25,
+   "recallAlarm": 0.6666666666666666,
+   "recallWarn": 0.9047619047619048,
+   "fprAlarm": 0,
+   "fprWarn": 0.04,
+   "precisionAlarm": 1,
+   "falseReassurance": 1,
+   "ece": 0.1232608695652174,
+   "brier": 0.0959108695652174,
+   "monotone": true,
+   "gapsMissed": 4
+  }
+ },
+ {
+  "version": "0.1.0",
+  "label": "after evaluation-driven fixes (young/re-used domain, unavailable safety check, partial URL evidence, marketplaces)",
+  "date": "2026-11-09",
+  "corpus": "v1",
+  "commit": "90ba247",
+  "holdout": {
+   "n": 24,
+   "fraud": 12,
+   "legit": 12,
+   "recallAlarm": 0.75,
+   "recallWarn": 1,
+   "fprAlarm": 0,
+   "fprWarn": 0.08333333333333333,
+   "precisionAlarm": 1,
+   "falseReassurance": 0,
+   "ece": 0.15916666666666668,
+   "brier": 0.07181666666666665,
+   "monotone": true,
+   "gapsMissed": 2
+  },
+  "dev": {
+   "n": 47,
+   "fraud": 21,
+   "legit": 26,
+   "recallAlarm": 0.6666666666666666,
+   "recallWarn": 0.9047619047619048,
+   "fprAlarm": 0,
+   "fprWarn": 0.038461538461538464,
+   "precisionAlarm": 1,
+   "falseReassurance": 0,
+   "ece": 0.11446808510638298,
+   "brier": 0.09154042553191488,
+   "monotone": true,
+   "gapsMissed": 4
+  }
+ },
+ {
+  "version": "0.1.0",
+  "label": "synthetic corpus v1 final: 52 dev + 26 holdout, all safeguards covered by a failing case",
+  "date": "2026-11-09",
+  "corpus": "v1",
+  "commit": "90ba247",
+  "dev": {
+   "n": 47,
+   "fraud": 21,
+   "legit": 26,
+   "recallAlarm": 0.6666666666666666,
+   "recallWarn": 0.9047619047619048,
+   "fprAlarm": 0,
+   "fprWarn": 0.038461538461538464,
+   "precisionAlarm": 1,
+   "falseReassurance": 0,
+   "ece": 0.11446808510638298,
+   "brier": 0.09154042553191488,
+   "monotone": true,
+   "gapsMissed": 5
+  },
+  "holdout": {
+   "n": 24,
+   "fraud": 12,
+   "legit": 12,
+   "recallAlarm": 0.75,
+   "recallWarn": 1,
+   "fprAlarm": 0,
+   "fprWarn": 0.08333333333333333,
+   "precisionAlarm": 1,
+   "falseReassurance": 0,
+   "ece": 0.15916666666666668,
+   "brier": 0.07181666666666665,
+   "monotone": true,
+   "gapsMissed": 2
+  }
+ }
+]

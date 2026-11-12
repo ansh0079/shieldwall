@@ -1,22 +1,61 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>BeforeYouBuy options</title>
-<style>body{font:14px system-ui;max-width:560px;margin:30px auto;padding:0 16px}label{display:block;margin:16px 0 4px;font-weight:600}input{width:100%;padding:6px;box-sizing:border-box}small{color:#666}</style></head>
+<style>
+body{font:14px system-ui;max-width:560px;margin:30px auto;padding:0 16px;color:#111827}
+label{display:block;margin:16px 0 4px;font-weight:600}
+input[type=password],input[type=text],input[type=number],input[type=url]{width:100%;padding:6px;box-sizing:border-box}
+small{color:#555}
+fieldset{border:1px solid #d1d5db;border-radius:8px;margin:20px 0;padding:10px 14px}
+legend{font-weight:600;padding:0 4px}
+.row{display:flex;gap:8px;align-items:flex-start;margin:8px 0}
+.row input{margin-top:3px}
+.row label{margin:0;font-weight:400}
+select{padding:5px}
+@media (prefers-color-scheme:dark){body{background:#111827;color:#f3f4f6}small{color:#9ca3af}fieldset{border-color:#374151}}
+</style></head>
 <body>
 <h1>BeforeYouBuy options</h1>
+
+<fieldset><legend>Checks and privacy</legend>
+<small>Each check sends only what its line says, and only when it is on. Nothing else leaves this browser.</small>
+<div class="row"><input id="useRdap" type="checkbox"><label for="useRdap"><b>Domain age</b> — sends the shop's domain name to rdap.org / rdap.verisign.com</label></div>
+<div class="row"><input id="useArchive" type="checkbox"><label for="useArchive"><b>Site history</b> — sends the shop's domain name to web.archive.org</label></div>
 <label for="sb">Google Safe Browsing API key</label>
 <input id="sb" type="password" autocomplete="off">
-<small>Free key from Google Cloud Console. Enables malware/phishing blocklist checks. The site's URL is sent to Google when set.</small>
+<small>Free key from Google Cloud Console. Enables malware/phishing blocklist checks. The site's URL is sent to Google when set; leave empty to turn the check off.</small>
+<label for="tp">Trustpilot API key</label>
+<input id="tp" type="password" autocomplete="off">
+<small>Enables live Trustpilot score. The site's domain is sent to Trustpilot when set; leave empty to turn the check off.</small>
 <label for="ch">Companies House API key (free)</label>
 <input id="ch" type="password" autocomplete="off">
-<small>Register free at developer.company-information.service.gov.uk. Verifies the company number a UK shop shows in its footer. The number is sent to Companies House.</small>
+<small>Register free at developer.company-information.service.gov.uk. Verifies the company number a UK shop shows in its footer. The number is sent to Companies House; leave empty to turn the check off.</small>
+<label for="sbttl">Safe Browsing result cache (minutes)</label>
+<input id="sbttl" type="number" min="1" max="1440" placeholder="30">
+<small>How long a clean/flagged result for one exact page URL is reused. Shorter is safer; each re-check sends the page URL to Google.</small>
+<p><button id="clear" type="button">Clear cached evidence</button> <span id="cleared"></span></p>
+<small>Removes every stored lookup result (domain ages, review scores, Safe Browsing answers, buyer-report summaries). The next page you visit is checked fresh.</small>
+</fieldset>
+
+<fieldset><legend>On-page badge</legend>
+<label for="badge">When a rating is ready</label>
+<select id="badge">
+  <option value="auto">Show the badge and open it briefly (default)</option>
+  <option value="quiet">Show the badge, never auto-open it</option>
+  <option value="off">Toolbar only: no on-page badge</option>
+</select>
+<small>The toolbar icon always shows the score, and Dangerous / High-risk checkout warnings appear in every mode. Sites where you clicked "hide on this site" stay hidden for 30 days.</small>
+<p><button id="unhide" type="button">Show the badge again on all sites</button> <span id="unhidden"></span></p>
+</fieldset>
+
+<fieldset><legend>Buyer reports</legend>
 <label for="be">Buyer-report server URL</label>
-<input id="be" placeholder="https://trustcheck.soloinvestor-ai.com" autocomplete="off">
-<small>Where buyer reports are stored and read. Only the shop domain, outcome, problem tags, anonymous install ID and whether an order confirmation was observed are sent.</small>
-<label style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer;">
-  <input id="rem" type="checkbox" style="width:auto;" checked>
-  <span>Follow up on orders 14 days later</span>
-</label>
-<small>Shows a private notification after 14 days and, if you answer “Not yet,” once more after 7 days. No name, email, address, account, or card details are stored or transmitted.</small>
-<p><button id="save">Save</button> <button id="testNotif" type="button" style="margin-left:8px;">Test reminder</button> <span id="ok"></span></p>
-<p><small>Keys are stored only in this browser. Without keys, BeforeYouBuy uses local checks and public domain-age lookups (domain name sent to rdap.org).</small></p>
-<script src="options.js"></script></body></html>
+<input id="be" type="url" placeholder="https://trustcheck.soloinvestor-ai.com" autocomplete="off">
+<small>Where buyer reports are stored and read. Must be https (http is allowed only for localhost testing). Only the shop's domain, your answer and a random anonymous install ID are sent.</small>
+<p><button id="erase" type="button">Delete my reports and reporting identity</button> <span id="erased"></span></p>
+<div class="row"><input id="rem" type="checkbox"><label for="rem"><b>Follow up on orders 14 days later</b> — a private notification after 14 days, and once more after 7 days if you answer “Not yet.” No name, email, address, account, or card details are stored or sent.</label></div>
+<p><button id="testNotif" type="button">Test reminder</button></p>
+</fieldset>
+
+<p><button id="save">Save</button> <span id="ok"></span></p>
+<p><small>Keys are stored only in this browser. With everything off, BeforeYouBuy still runs its local checks (address and page cues); it never sells or shares data.</small></p>
+<script type="module" src="options.js"></script></body></html>

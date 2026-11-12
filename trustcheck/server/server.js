@@ -1,387 +1,212 @@
-// BeforeYouBuy report server. `node server/server.js`
-// Env: PORT(8787) HOST(0.0.0.0) DATA_FILE(data.json / reports.sqlite) MIN_REPORTS(3) RATE_LIMIT(20 reports/h/IP)
-//      TRUST_PROXY(false: set true behind a reverse proxy) CORS_ORIGIN(*) REPORT_SALT(required in production)
+// TrustCheck report server. See DEPLOY.md and RUNBOOK.md. Configuration comes from the environment (config.js validates it).
 import http from "node:http";
-import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
-import { Store } from "./store.js";
-import { safeBrowsing } from "../lib/providers.js";
-import { domainAge, firstArchived, reviewLinks } from "../lib/providers.js";
-import { registrableDomain, isSearchEngine } from "../lib/domain.js";
-import { urlSignals } from "../lib/heuristics.js";
-import { historySignals, historyLines } from "../lib/history.js";
-import { buyerSignals, buyerFeedback } from "../lib/buyers.js";
-import { buildReport } from "../lib/score.js";
-import { fetchCompany } from "../lib/companies.js";
-import { fetchTrustpilotSummary } from "./trustpilot.js";
+import { ApiError, cleanDomain } from "./vocab.js";
+import { timingSafeEqualStr } from "./credentials.js";
+import { resolveClientIp, originAllowed, inAny } from "./net.js";
+import { createLogger, Metrics } from "./log.js";
 
-export function clientIp(req, trustProxy) {
-  if (trustProxy) {
-    const xff = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-    if (xff) return xff;
-  }
-  return req.socket.remoteAddress || "unknown";
+// Close a server completely (idle keep-alive sockets included) and resolve when it is down.
+export function shutdown(srv) {
+  return new Promise((resolve) => {
+    srv.close(() => resolve());
+    srv.closeIdleConnections?.(); srv.closeAllConnections?.();
+  });
 }
 
-export function clientSubnet(ip) {
-  if (!ip || typeof ip !== "string") return "unknown";
-  if (ip.includes(":")) {
-    const parts = ip.split(":");
-    return parts.slice(0, 3).join(":") + "::/48";
-  }
-  const parts = ip.split(".");
-  if (parts.length === 4) {
-    return parts.slice(0, 3).join(".") + ".0/24";
-  }
-  return ip;
-}
+const SQLITE_FAULTS = { 5: "busy", 6: "locked", 8: "read-only", 10: "io error", 11: "corrupt", 13: "disk full", 14: "cannot open", 26: "not a database" };
+const isSqlite = (e) => e?.code === "ERR_SQLITE_ERROR";
 
-export function createServer(store, { rateLimit = 20, readLimit = 300, trustProxy = false, corsOrigin = "*", sbKey = "", chKey = "", tpKey = "", adminToken = "", merchantVerification = false } = {}) {
-  const hits = new Map(); // `${kind}|${key}` -> timestamps (1h window)
-  const serverCache = new Map(); // key -> { at, data }
-
-  const limited = (kind, key, max) => {
-    const t = Date.now(), k = kind + "|" + key, arr = (hits.get(k) || []).filter((x) => t - x < 3600000);
-    arr.push(t);
-    hits.set(k, arr);
-    return arr.length > max;
+export function createServer(store, options = {}) {
+  const o = { rateLimit: 20, readLimit: 300, trustedProxies: [], allowedOrigins: "*", keepAlive: true, adminTokens: [], adminCidrs: [],
+    maxConnections: 512, maxConcurrentPerIp: 20, maxHeaderBytes: 8192, bodyLimit: 8192, maxResponseBytes: 256 * 1024,
+    headersTimeoutMs: 10_000, requestTimeoutMs: 15_000, metricsPublic: false, ...options };
+  const metrics = o.metrics || new Metrics(), logger = o.logger || createLogger({ write: () => {} });
+  const state = { draining: false, inflight: 0 };
+  const hits = new Map(), perIp = new Map();                      // `${kind}|${ip}` -> timestamps; ip -> concurrent requests
+  const limited = (kind, ip, max) => {
+    const t = Date.now(), k = kind + "|" + ip, arr = (hits.get(k) || []).filter((x) => t - x < 3_600_000);
+    arr.push(t); hits.set(k, arr); return arr.length > max;
   };
-  const csvCell = (value) => {
-    let text = String(value ?? "");
-    if (/^[=+@-]/.test(text)) text = "'" + text;
-    return `"${text.replace(/"/g, '""')}"`;
-  };
-
-  const sweep = setInterval(() => {
-    const t = Date.now();
-    for (const [k, arr] of hits) if (!arr.some((x) => t - x < 3600000)) hits.delete(k);
-  }, 600000);
+  const sweep = setInterval(() => { const t = Date.now(); for (const [k, arr] of hits) if (!arr.some((x) => t - x < 3_600_000)) hits.delete(k); }, 600_000);
   sweep.unref();
 
-  const srv = http.createServer(async (req, res) => {
-    const send = (code, obj, extra = {}) => {
-      res.writeHead(code, {
-        "content-type": "application/json",
-        "x-content-type-options": "nosniff",
-        "access-control-allow-origin": corsOrigin,
-        "access-control-allow-headers": "content-type, authorization",
-        "access-control-allow-methods": "GET,POST,OPTIONS",
-        ...extra
-      });
-      res.end(JSON.stringify(obj));
-    };
+  const bearer = (req) => /^Bearer (\S{1,600})$/.exec(String(req.headers.authorization || ""))?.[1] || "";
+  const readBody = (req) => new Promise((resolve, reject) => {
+    if (Number(req.headers["content-length"] || 0) > o.bodyLimit) return reject(new ApiError(413, "payload too large"));
+    let body = "", dead = false;
+    req.on("data", (c) => { body += c; if (body.length > o.bodyLimit && !dead) { dead = true; reject(new ApiError(413, "payload too large")); req.destroy(); } });
+    req.on("end", () => {
+      if (dead) return;
+      if (!body) return resolve({});
+      if (!/^application\/json\b/i.test(req.headers["content-type"] || "")) return reject(new ApiError(415, "content-type must be application/json"));
+      try { const j = JSON.parse(body); resolve(j && typeof j === "object" && !Array.isArray(j) ? j : {}); } catch { reject(new ApiError(400, "invalid JSON")); }
+    });
+    req.on("error", () => reject(new ApiError(400, "read error")));
+  });
+  const int = (v, d, min, max) => { const n = Number.parseInt(v, 10); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : d; };
 
-    if (req.method === "OPTIONS") return send(204, {});
-    const url = new URL(req.url, "http://x");
-    const ip = clientIp(req, trustProxy);
-    const subnet = clientSubnet(ip);
-    const bearer = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  // Named admin tokens: the audit log records WHO acted. Optional network restriction; lockout after repeated failures.
+  function adminActor(req, ip) {
+    if (!o.adminTokens.length) return { status: 404 };
+    if (o.adminCidrs.length && !inAny(ip, o.adminCidrs)) return { status: 404 };          // do not reveal the API to other networks
+    if (limited("admin", ip, 600)) return { status: 429, error: "rate limited" };
+    const fails = (hits.get("adminfail|" + ip) || []).filter((x) => Date.now() - x < 3_600_000).length;
+    if (fails >= 10) return { status: 429, error: "too many failed attempts" };
+    const t = bearer(req);
+    let name = null;
+    for (const a of o.adminTokens) if (timingSafeEqualStr(t, a.token)) name = a.name;     // checks every token: no early exit
+    if (!name) { limited("adminfail", ip, Infinity); metrics.inc("auth_failures_total", 1, { kind: "admin" }); return { status: 401, error: "unauthorized" }; }
+    return { name };
+  }
+
+  const handler = async (req, res) => {
+    const started = process.hrtime.bigint(), id = Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
+    const m = req.method, client = resolveClientIp(req, o.trustedProxies), ip = client.ip;
+    let url; try { url = new URL(req.url, "http://x"); } catch { url = new URL("http://x/"); }
+    const p = url.pathname;
+    let route = "unmatched", status = 0;
+    const origin = req.headers.origin;
+    const originOk = origin === undefined || originAllowed(origin, o.allowedOrigins);
+
+    const send = (code, obj, extra = {}, raw = null) => {
+      let body = raw ?? JSON.stringify(obj);
+      if (body.length > o.maxResponseBytes) { logger.error("response_too_large", { route, bytes: body.length }); metrics.inc("response_too_large_total"); code = 500; body = JSON.stringify({ error: "internal error" }); raw = null; }
+      status = code;
+      res.writeHead(code, { "content-type": raw ? "text/plain; version=0.0.4" : "application/json", "x-content-type-options": "nosniff", "x-request-id": id,
+        "cache-control": "no-store", "content-security-policy": "default-src 'none'; frame-ancestors 'none'", "referrer-policy": "no-referrer",
+        ...(o.keepAlive && !state.draining ? {} : { connection: "close" }),
+        ...(origin !== undefined && originOk ? { "access-control-allow-origin": o.allowedOrigins === "*" ? "*" : origin, vary: "Origin",
+          "access-control-allow-headers": "content-type, authorization", "access-control-allow-methods": "GET,POST,DELETE,OPTIONS", "access-control-max-age": "600" } : {}),
+        ...extra });
+      res.end(body);
+    };
+    res.on("close", () => {
+      state.inflight--; const n = (perIp.get(ip) || 1) - 1; n <= 0 ? perIp.delete(ip) : perIp.set(ip, n);
+      const secs = Number(process.hrtime.bigint() - started) / 1e9;
+      metrics.inc("http_requests_total", 1, { route, status: String(status || 0) });
+      metrics.observe("http_request_duration_seconds", secs, { route });
+      if (route !== "GET /healthz" && route !== "GET /readyz") logger.info("request", { id, method: m, route, status, ms: Math.round(secs * 1000) });
+    });
+    state.inflight++; perIp.set(ip, (perIp.get(ip) || 0) + 1);
+    if (client.malformed) { metrics.inc("malformed_forwarded_for_total"); logger.warn("malformed_forwarded_for", { id }); }
 
     try {
-      if (req.method === "GET" && url.pathname === "/healthz") {
-        return send(200, { ok: true, sqlite: !!store.useSqlite });
+      if (req.url.length > 2048) return send(414, { error: "uri too long" });
+      if (!originOk) { route = "forbidden_origin"; return send(403, { error: "origin not allowed" }); }
+      if ((perIp.get(ip) || 0) > o.maxConcurrentPerIp) { route = "too_many_concurrent"; metrics.inc("rate_limited_total", 1, { kind: "concurrency" }); return send(429, { error: "too many concurrent requests" }, { "retry-after": "1" }); }
+      if (m === "OPTIONS") { route = "OPTIONS"; return send(204, {}); }
+
+      if (m === "GET" && p === "/healthz") { route = "GET /healthz"; return send(200, { ok: true }); }       // liveness: the process is up
+      if (m === "GET" && p === "/readyz") {                                                                  // readiness: able to serve traffic
+        route = "GET /readyz";
+        const r = store.readiness(); if (state.draining) { r.ok = false; r.checks.draining = "shutting down"; }
+        return send(r.ok ? 200 : 503, r);
       }
+      if (state.draining) { route = "draining"; return send(503, { error: "shutting down" }, { "retry-after": "5" }); }
 
-      // Mobile share-to-check: only the origin is retained/queried; no page scan.
-      if (req.method === "GET" && url.pathname === "/v1/mobile-check") {
-        if (limited("read", ip, readLimit)) return send(429, { error: "rate limited" });
-        let shop;
-        try { shop = new URL(url.searchParams.get("url") || ""); } catch { return send(400, { error: "invalid shop URL" }); }
-        if (!/^https?:$/.test(shop.protocol) || shop.username || shop.password || isSearchEngine(shop.hostname))
-          return send(400, { error: "share a shop website URL" });
-        const domain = registrableDomain(shop.hostname);
-        if (!Store.cleanDomain(domain)) return send(400, { error: "invalid shop domain" });
-        const cacheKey = "mobile:" + domain;
-        let rec = serverCache.get(cacheKey);
-        if (!rec || Date.now() - rec.at >= 6 * 3600 * 1000) {
-          const [age, arch, sb] = await Promise.allSettled([
-            domainAge(domain), firstArchived(domain), sbKey ? safeBrowsing(`https://${domain}/`, sbKey) : Promise.resolve(null)
-          ]);
-          rec = { at: Date.now(), data: {
-            signals: [...(age.status === "fulfilled" ? age.value : []), ...(sb.status === "fulfilled" ? sb.value?.signals || [] : [])],
-            registered: age.status === "fulfilled" ? age.value[0]?.since || null : null,
-            archived: arch.status === "fulfilled" ? arch.value : null,
-            flagged: sb.status === "fulfilled" && !!sb.value?.flagged
-          } };
-          serverCache.set(cacheKey, rec);
-        }
-        const network = rec.data;
-        const summary = store.summary(domain);
-        const tpKeyCache = "tp:" + domain;
-        let reviews = serverCache.get(tpKeyCache);
-        if (!reviews || Date.now() - reviews.at >= 6 * 3600 * 1000) {
-          reviews = { at: Date.now(), data: await fetchTrustpilotSummary(domain, tpKey) };
-          serverCache.set(tpKeyCache, reviews);
-        }
-        const signals = [
-          ...urlSignals(shop.origin + "/"), ...network.signals, ...historySignals(network), ...buyerSignals(summary)
-        ];
-        const report = buildReport({ url: shop.origin + "/", domain, signals, reviews: reviews.data,
-          links: reviewLinks(domain), flagged: network.flagged, feedback: buyerFeedback(summary),
-          buyerTotal: summary.hidden ? 0 : summary.total,
-          buyerOutcomes: summary.hidden ? null : summary.outcomes || null,
-          sixMonthNonDelivery: summary.sixMonthNonDelivery || 0,
-          sixMonthNotMatched: summary.sixMonthNotMatched || 0,
-          sixMonthDelivered: summary.sixMonthDelivered || 0,
-          sixMonthObservedTotal: summary.sixMonthObservedTotal || 0,
-          sixMonthOutcomes: summary.sixMonthOutcomes || null,
-          minReports: summary.minReports });
-        report.history = historyLines(network);
-        report.analysisScope = "Domain and server data only; page content and checkout were not scanned.";
-        return send(200, report, { "cache-control": "no-store" });
-      }
-
-      // Endpoint to issue a cryptographically signed client installation credential
-      if (req.method === "POST" && url.pathname === "/v1/register") {
-        if (limited("reg", ip, 15)) return send(429, { error: "rate limited" });
-        return send(200, store.issueCredential());
-      }
-
-      // Merchant verification endpoints
-      if (req.method === "GET" && url.pathname === "/v1/merchant/status") {
-        const domain = url.searchParams.get("domain");
-        if (!domain) return send(400, { error: "missing domain parameter" });
-        const ver = store.getMerchantVerification(domain);
-        return send(200, { domain, verified: !!ver, verifiedAt: ver?.verifiedAt || null });
-      }
-
-      if (req.method === "POST" && url.pathname === "/v1/merchant/verify") {
-        if (!merchantVerification) return send(404, { error: "not found" });
-        if (limited("merchant-ver", ip, 5)) return send(429, { error: "rate limited" });
-        let body = "";
-        req.on("data", (c) => { body += c; });
-        req.on("end", async () => {
-          try {
-            const { domain, token } = JSON.parse(body);
-            if (!domain || !token) return send(400, { error: "domain and token required" });
-            const clean = Store.cleanDomain(domain);
-            if (!clean) return send(400, { error: "invalid domain" });
-
-            // In production, fetch https://${clean}/.well-known/trustcheck.json to verify ownership
-            let verified = false;
-            try {
-              const res = await fetch(`https://${clean}/.well-known/trustcheck.json`, {
-                headers: { "user-agent": "TrustCheck-Verification/1.0" },
-                signal: AbortSignal.timeout(5000)
-              });
-              if (res.ok) {
-                const doc = await res.json();
-                if (doc.token === token && (doc.domain === clean || !doc.domain)) {
-                  verified = true;
-                }
-              }
-            } catch {
-              // Direct network fetch failure
-            }
-
-            if (verified) {
-              const record = store.addMerchantVerification(clean, token, "well-known");
-              return send(200, { ok: true, domain: clean, verifiedAt: record.verifiedAt });
-            }
-            return send(400, { error: "verification token not found at /.well-known/trustcheck.json" });
-          } catch (e) {
-            return send(400, { error: e.message });
-          }
-        });
-        return;
-      }
-
-      if (req.method === "GET" && url.pathname === "/v1/check") {
-        if (limited("read", ip, readLimit)) return send(429, { error: "rate limited" });
-        const rawDomain = url.searchParams.get("domain");
-        const clean = Store.cleanDomain(rawDomain);
-        if (!clean) return send(400, { error: "invalid domain" });
-        const fresh = url.searchParams.get("fresh") === "1";
-
-        const summary = store.summary(clean);
-        const ver = store.getMerchantVerification(clean);
-        const requestedUrl = url.searchParams.get("url") || `https://${clean}/`;
-        let targetUrl = `https://${clean}/`;
-        try {
-          const parsedTarget = new URL(requestedUrl);
-          if (Store.cleanDomain(parsedTarget.hostname) === clean && /^https?:$/.test(parsedTarget.protocol)) targetUrl = parsedTarget.href;
-        } catch { /* use canonical domain URL */ }
-        const companyNumber = url.searchParams.get("companyNumber");
-
-        // Safe browsing lookup (server-cached)
-        let sbResult = null;
-        if (sbKey) {
-          const sbCacheKey = "sb:" + clean;
-          const cachedSb = serverCache.get(sbCacheKey);
-          if (!fresh && cachedSb && Date.now() - cachedSb.at < 6 * 3600 * 1000) {
-            sbResult = cachedSb.data;
-          } else {
-            try {
-              sbResult = await safeBrowsing(targetUrl, sbKey);
-              serverCache.set(sbCacheKey, { at: Date.now(), data: sbResult });
-            } catch {
-              sbResult = null;
-            }
-          }
-        }
-
-        // Company profile lookup (server-cached)
-        let companyResult = null;
-        if (chKey && companyNumber) {
-          const coCacheKey = "co:" + companyNumber;
-          const cachedCo = serverCache.get(coCacheKey);
-          if (!fresh && cachedCo && Date.now() - cachedCo.at < 24 * 3600 * 1000) {
-            companyResult = cachedCo.data;
-          } else {
-            try {
-              const profile = await fetchCompany(companyNumber, chKey);
-              companyResult = { profile };
-              serverCache.set(coCacheKey, { at: Date.now(), data: companyResult });
-            } catch {
-              companyResult = null;
-            }
-          }
-        }
-
-        // Trustpilot summary lookup (server-cached)
-        let tpResult = null;
-        const tpCacheKey = "tp:" + clean;
-        const cachedTp = serverCache.get(tpCacheKey);
-        if (!fresh && cachedTp && Date.now() - cachedTp.at < 6 * 3600 * 1000) {
-          tpResult = cachedTp.data;
-        } else {
-          try {
-            tpResult = await fetchTrustpilotSummary(clean, tpKey);
-            serverCache.set(tpCacheKey, { at: Date.now(), data: tpResult });
-          } catch {
-            tpResult = { source: "Trustpilot", score: null, count: null, themes: [], url: `https://www.trustpilot.com/review/${clean}` };
-          }
-        }
-
-        return send(200, {
-          domain: clean,
-          summary,
-          verifiedMerchant: !!ver,
-          safeBrowsing: sbResult,
-          company: companyResult,
-          reviews: tpResult
-        }, { "cache-control": fresh ? "no-store" : "public, max-age=60" });
-      }
-
-      if (req.method === "GET" && url.pathname === "/v1/export/orders") {
-        if (!adminToken || bearer !== adminToken) return send(401, { error: "unauthorized" });
-        const domain = url.searchParams.get("domain") || null;
-        const format = url.searchParams.get("format") || "json";
-        const rows = store.getOrderLogs(domain);
-        if (format === "csv") {
-          const header = "Shop domain,Storefront name,Receiver name,Trustpilot score,Trustpilot reviews,Trustpilot URL,Outcome,Order date,Answer date\n";
-          const lines = rows.map((r) =>
-            [r.domain, r.storefrontName || "", r.receiverName || "", r.trustpilotScore ?? "", r.trustpilotCount ?? "", r.trustpilotUrl || "", r.outcome, r.orderDate || "", r.answerDate].map(csvCell).join(",")
-          ).join("\n");
-          res.writeHead(200, { "content-type": "text/csv", "content-disposition": "attachment; filename=orders-export.csv" });
-          return res.end(header + lines);
-        }
-        return send(200, { ok: true, total: rows.length, rows });
-      }
-
-      if (req.method === "GET" && url.pathname === "/v1/export/feedback") {
-        if (!adminToken || bearer !== adminToken) return send(401, { error: "unauthorized" });
-        const rows = store.feedbackDetails(url.searchParams.get("domain"));
-        return send(200, { total: rows.length, rows }, { "cache-control": "no-store" });
-      }
-
-      if (req.method === "GET" && url.pathname === "/v1/summary") {
-        if (limited("read", ip, readLimit)) return send(429, { error: "rate limited" });
+      if (m === "GET" && p === "/v1/summary") {
+        route = "GET /v1/summary";
+        if (limited("read", ip, o.readLimit)) { metrics.inc("rate_limited_total", 1, { kind: "read" }); return send(429, { error: "rate limited" }); }
         return send(200, store.summary(url.searchParams.get("domain")), { "cache-control": "public, max-age=60" });
       }
-
-      if (req.method === "POST" && url.pathname === "/v1/report") {
-        if (limited("write", ip, rateLimit) || limited("write-sub", subnet, rateLimit * 3)) {
-          return send(429, { error: "rate limited" });
-        }
-        if (Number(req.headers["content-length"] || 0) > 4096) return send(413, { error: "payload too large" });
-
-        let body = "", tooBig = false;
-        req.on("data", (c) => {
-          body += c;
-          if (body.length > 4096) { tooBig = true; req.destroy(); }
-        });
-        req.on("end", () => {
-          if (tooBig) return;
+      if (m === "GET" && p === "/v1/challenge") {
+        route = "GET /v1/challenge";
+        if (limited("read", ip, o.readLimit)) { metrics.inc("rate_limited_total", 1, { kind: "read" }); return send(429, { error: "rate limited" }); }
+        return send(200, store.challenge());
+      }
+      // Unified lookup used by the extension so shoppers do not have to supply third-party API keys.
+      // Outbound checks (Safe Browsing, Companies House, Trustpilot) run only when the operator passed handlers.
+      if (m === "GET" && p === "/v1/check") {
+        route = "GET /v1/check";
+        if (limited("read", ip, o.readLimit)) { metrics.inc("rate_limited_total", 1, { kind: "read" }); return send(429, { error: "rate limited" }); }
+        const summary = store.summary(url.searchParams.get("domain"));
+        const clean = summary.domain;
+        let targetUrl = `https://${clean}/`;
+        const requestedUrl = url.searchParams.get("url") || "";
+        if (requestedUrl) {
           try {
-            const data = JSON.parse(body);
-            if (!store.verifyCredential(data.installId, bearer)) return send(401, { error: "invalid credential" });
-            store.add(data);
+            const parsed = new URL(requestedUrl);
+            if (cleanDomain(parsed.hostname) === clean && /^https?:$/.test(parsed.protocol)) targetUrl = parsed.href;
+          } catch { /* keep canonical domain URL */ }
+        }
+        const companyNumber = (url.searchParams.get("companyNumber") || "").trim();
+        let safeBrowsing = null, company = null, reviews = null;
+        try { if (o.safeBrowsing) safeBrowsing = await o.safeBrowsing(targetUrl); } catch { safeBrowsing = null; }
+        try { if (o.fetchCompany && /^[A-Za-z0-9]{6,10}$/.test(companyNumber)) company = { profile: await o.fetchCompany(companyNumber) }; } catch { company = null; }
+        try {
+          if (o.fetchTrustpilot) reviews = await o.fetchTrustpilot(clean);
+          else reviews = { source: "Trustpilot", score: null, count: null, sample: 0, themes: [], url: `https://www.trustpilot.com/review/${clean}` };
+        } catch { reviews = { source: "Trustpilot", score: null, count: null, sample: 0, themes: [], url: `https://www.trustpilot.com/review/${clean}` }; }
+        const verifiedMerchant = typeof store.getMerchantVerification === "function" ? !!store.getMerchantVerification(clean) : false;
+        return send(200, { domain: clean, summary, verifiedMerchant, safeBrowsing, company, reviews }, { "cache-control": "public, max-age=60" });
+      }
 
-            // Record in order log for payment processor export (Step 4)
-            if (data.purchaseId && (data.storefrontName || data.receiverName || data.outcome)) {
-              let tpScore = null, tpCount = null, tpUrl = "";
-              const tpCacheKey = "tp:" + Store.cleanDomain(data.domain);
-              const cached = serverCache.get(tpCacheKey);
-              if (cached?.data) {
-                tpScore = cached.data.score;
-                tpCount = cached.data.count;
-                tpUrl = cached.data.url;
-              }
-              const outcomeNormalized = data.outcome === "never" ? "did_not_arrive" : (data.tags && data.tags.includes("not_as_described")) ? "did_not_match" : "arrived";
-              store.addOrderLog({
-                domain: data.domain,
-                storefrontName: data.storefrontName,
-                receiverName: null,
-                trustpilotScore: tpScore,
-                trustpilotCount: tpCount,
-                trustpilotUrl: tpUrl,
-                outcome: outcomeNormalized,
-                orderDate: data.orderDate || "",
-                answerDate: data.answerDate || new Date().toISOString()
-              });
-            }
+      // ---- admin ----
+      if (p.startsWith("/admin/") || p === "/metrics") {
+        route = (p === "/metrics" ? "GET /metrics" : `${m} ${p.replace(/[a-f0-9]{16,24}/g, ":id")}`);
+        if (p === "/metrics" && o.metricsPublic) return send(200, null, {}, metrics.render());
+        const a = adminActor(req, ip);
+        if (a.status) return send(a.status, { error: a.error || "not found" });
+        const actor = a.name;
+        if (m === "GET" && p === "/metrics") return send(200, null, {}, metrics.render());
+        if (m === "GET" && p === "/admin/queue") return send(200, store.queue({ limit: int(url.searchParams.get("limit"), 50, 1, 200), after: url.searchParams.get("after") || "" }));
+        if (m === "GET" && p === "/admin/disputes") return send(200, store.listDisputes({ status: url.searchParams.get("status") || null, limit: int(url.searchParams.get("limit"), 50, 1, 200), offset: int(url.searchParams.get("offset"), 0, 0, 1e9) }));
+        if (m === "GET" && p === "/admin/audit") return send(200, store.auditLog({ after: int(url.searchParams.get("after"), 0, 0, 1e12), limit: int(url.searchParams.get("limit"), 50, 1, 200) }));
+        if (m === "GET" && p === "/admin/audit/verify") return send(200, store.verifyAudit());
+        if (m === "POST" && p === "/admin/reports/moderate") { const b = await readBody(req); return send(200, store.moderate(Array.isArray(b.ids) ? b.ids.slice(0, 200) : [], b.action, actor)); }
+        let mm;
+        if (m === "POST" && (mm = /^\/admin\/credentials\/([a-f0-9]{24})\/revoke$/.exec(p))) return send(200, store.revokeCredential(mm[1], actor));
+        if (m === "POST" && (mm = /^\/admin\/disputes\/([a-f0-9]{16})\/resolve$/.exec(p))) { const b = await readBody(req); return send(200, store.resolveDispute(mm[1], b.resolution, actor)); }
+        return send(404, { error: "not found" });
+      }
 
-            send(200, { ok: true });
-          } catch (e) {
-            const status = e.message.includes("limit") ? 429 : 400;
-            send(status, { error: e.message });
-          }
-        });
-        return;
+      // ---- public writes ----
+      const write = () => { if (limited("write", ip, o.rateLimit)) { metrics.inc("rate_limited_total", 1, { kind: "write" }); throw new ApiError(429, "rate limited"); } };
+      let dm;
+      if (m === "POST" && p === "/v1/enroll") { route = "POST /v1/enroll"; write(); const b = await readBody(req); return send(200, store.enroll({ ip, challenge: b.challenge, solution: b.solution })); }
+      if (m === "POST" && p === "/v1/report") {
+        route = "POST /v1/report"; write(); const b = await readBody(req);
+        try { return send(200, store.submit({ token: bearer(req), ip, domain: b.domain, outcome: b.outcome, tags: b.tags, proof: b.proof })); }
+        catch (e) { if (e.status === 401) metrics.inc("auth_failures_total", 1, { kind: "credential" }); throw e; }
+      }
+      if (m === "DELETE" && p === "/v1/report") { route = "DELETE /v1/report"; write(); return send(200, store.deleteReport(bearer(req), url.searchParams.get("domain"))); }
+      if (m === "DELETE" && p === "/v1/credential") { route = "DELETE /v1/credential"; write(); return send(200, store.eraseCredential(bearer(req))); }
+      if (m === "POST" && p === "/v1/disputes") { route = "POST /v1/disputes"; write(); const b = await readBody(req); return send(200, store.openDispute({ domain: b.domain, message: b.message, contact: b.contact })); }
+      if ((dm = /^\/v1\/disputes\/([a-f0-9]{16})(\/verify|\/appeal)?$/.exec(p))) {
+        route = `${m} /v1/disputes/:id${dm[2] || ""}`;
+        if (m === "GET" && !dm[2]) { if (limited("read", ip, o.readLimit)) throw new ApiError(429, "rate limited"); return send(200, store.disputeStatus(dm[1], bearer(req))); }
+        if (m === "POST" && dm[2] === "/verify") { write(); return send(200, await store.verifyDispute(dm[1])); }
+        if (m === "POST" && dm[2] === "/appeal") { write(); const b = await readBody(req); return send(200, store.appealDispute(dm[1], bearer(req), b.message)); }
       }
       send(404, { error: "not found" });
     } catch (e) {
-      send(400, { error: e.message });
+      if (e instanceof ApiError) return send(e.status, { error: e.message });
+      if (isSqlite(e)) {                                         // a database fault is an operational problem, not the client's: 503, logged, counted
+        metrics.inc("db_errors_total", 1, { kind: SQLITE_FAULTS[e.errcode] || "other" });
+        logger.error("db_fault", { id, route, errcode: e.errcode, kind: SQLITE_FAULTS[e.errcode] || "other" });
+        return send(503, { error: "temporarily unavailable" }, { "retry-after": "5" });
+      }
+      logger.error("unhandled_error", { id, route, error: String(e?.message || e).slice(0, 160) });
+      metrics.inc("unhandled_errors_total");
+      send(500, { error: "internal error" });                    // never echo internals
     }
-  });
-
-  srv.headersTimeout = 10000;
-  srv.requestTimeout = 10000;
-  return srv;
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const env = process.env;
-  if (env.NODE_ENV === "production" && (!env.REPORT_SALT || !env.ADMIN_TOKEN || !env.CORS_ORIGIN || env.CORS_ORIGIN === "*")) {
-    console.error("REPORT_SALT, ADMIN_TOKEN and a restricted CORS_ORIGIN are required in production");
-    process.exit(1);
-  }
-  const store = new Store({
-    file: env.DATABASE_FILE || env.DATA_FILE || "data.json",
-    minReports: Number(env.MIN_REPORTS || 3),
-    salt: env.REPORT_SALT || "dev-salt"
-  });
-  const srv = createServer(store, {
-    rateLimit: Number(env.RATE_LIMIT || 20),
-    trustProxy: env.TRUST_PROXY === "true",
-    corsOrigin: env.CORS_ORIGIN || "*",
-    sbKey: env.GOOGLE_SAFE_BROWSING_KEY || env.SAFE_BROWSING_KEY || "",
-    chKey: env.COMPANIES_HOUSE_KEY || "",
-    tpKey: env.TRUSTPILOT_API_KEY || "",
-    adminToken: env.ADMIN_TOKEN || "",
-    merchantVerification: env.ENABLE_MERCHANT_VERIFICATION === "true"
-  });
-  const timer = setInterval(() => store.flush(), 5000);
-  const stop = () => {
-    clearInterval(timer);
-    store.flush();
-    srv.close(() => process.exit(0));
-    setTimeout(() => process.exit(0), 3000).unref();
   };
-  process.on("SIGTERM", stop);
-  process.on("SIGINT", stop);
-  srv.listen(Number(env.PORT || 8787), env.HOST || "0.0.0.0", () => {
-    console.log(`BeforeYouBuy report server on :${env.PORT || 8787} (SQLite: ${store.useSqlite})`);
-  });
+
+  // Node only enforces headersTimeout/requestTimeout when its connection check runs (default every 30 s), so a "10 s" limit would really
+// be up to 40 s. Check often enough that the configured limits mean what they say.
+const srv = http.createServer({ maxHeaderSize: o.maxHeaderBytes, keepAliveTimeout: 5000,
+    connectionsCheckingInterval: o.connectionsCheckingInterval ?? Math.min(5000, Math.max(100, Math.floor(o.headersTimeoutMs / 2))) }, handler);
+  srv.maxConnections = o.maxConnections; srv.maxRequestsPerSocket = 100;
+  srv.headersTimeout = o.headersTimeoutMs; srv.requestTimeout = o.requestTimeoutMs;
+  srv.on("clientError", (err, socket) => { metrics.inc("client_errors_total", 1, { code: err.code || "unknown" }); if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\nconnection: close\r\n\r\n"); else socket.destroy(); });
+  srv.on("close", () => clearInterval(sweep));
+  srv.state = state; srv.metrics = metrics;
+  // Stop taking new work, let in-flight requests finish (bounded), then close.
+  srv.drain = async (timeoutMs = 10_000) => {
+    state.draining = true;
+    const t0 = Date.now();
+    while (state.inflight > 0 && Date.now() - t0 < timeoutMs) await new Promise((r) => setTimeout(r, 25));
+    return { inflightLeft: state.inflight };
+  };
+  return srv;
 }

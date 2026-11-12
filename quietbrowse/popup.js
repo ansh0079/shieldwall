@@ -5,6 +5,9 @@ const faviconEl = document.getElementById("favicon");
 const trustRowEl = document.getElementById("trustRow");
 const trustScoreEl = document.getElementById("trustScore");
 const trustLabelEl = document.getElementById("trustLabel");
+const trustDetailEl = document.getElementById("trustDetail");
+const trustReasonsEl = document.getElementById("trustReasons");
+const trustActivityEl = document.getElementById("trustActivity");
 const shieldBtn = document.getElementById("shieldBtn");
 const pageCountEl = document.getElementById("pageCount");
 const totalCountEl = document.getElementById("totalCount");
@@ -14,18 +17,17 @@ const siteModeSelect = document.getElementById("siteMode");
 const siteRow = document.getElementById("siteRow");
 const learnedEl = document.getElementById("learned");
 const hintEl = document.getElementById("hint");
+const filterHealthEl = document.getElementById("filterHealth");
+const cookieOutcomeEl = document.getElementById("cookieOutcome");
+const pageFixActiveEl = document.getElementById("pageFixActive");
+const recoveryActionsEl = document.getElementById("recoveryActions");
+const keepFixBtn = document.getElementById("keepFixBtn");
+const restoreFixBtn = document.getElementById("restoreFixBtn");
 const zapBtn = document.getElementById("zapBtn");
 const fixSiteBtn = document.getElementById("fixSiteBtn");
 const reportCheck = document.getElementById("reportCheck");
 const optionsLink = document.getElementById("optionsLink");
 const allowAdsBtn = document.getElementById("allowAdsBtn");
-const promoSection = document.getElementById("promo");
-const reviewPromptEl = document.getElementById("reviewPrompt");
-const reviewCtaBtn = document.getElementById("reviewCta");
-const reviewDismissBtn = document.getElementById("reviewDismiss");
-const shareCardEl = document.getElementById("shareMilestone");
-const shareTitleEl = document.getElementById("shareTitle");
-const shareBtn = document.getElementById("shareBtn");
 
 const CATEGORY_ORDER = ["advertising", "analytics", "social", "other", "learned"];
 
@@ -42,6 +44,7 @@ let currentDomain = null;
 let currentTabId = null;
 let currentTabUrl = null;
 let protectionEnabled = true;
+let currentRecoveryStage = null;
 
 optionsLink.href = chrome.runtime.getURL("options.html");
 
@@ -55,7 +58,6 @@ chrome.runtime.onMessage.addListener((msg) => {
     if (msg.learnedCount > 0) {
       learnedEl.textContent = i18n("learnedFooter", String(msg.learnedCount));
     }
-    if (protectionEnabled && currentTabId) loadTrustScore(currentTabId);
   } else if (msg.type === "trustScoreUpdated" && currentTabId) {
     loadTrustScore(currentTabId);
   }
@@ -84,9 +86,9 @@ async function init() {
     enabled: true,
     siteModes: {},
     totalBlocked: 0,
-    installAt: null,
-    reviewPromptDone: false,
-    milestoneShared_10000: false
+    siteContentExceptions: {},
+    lastFilterUpdate: 0,
+    filterUpdateError: null
   });
 
   protectionEnabled = data.enabled;
@@ -95,11 +97,23 @@ async function init() {
   if (currentDomain) {
     const mode = resolveSiteMode(currentDomain, data.siteModes);
     siteModeSelect.value = mode;
+    const exception = getSiteContentException(currentDomain, data.siteContentExceptions);
+    showRecoveryStage(exception?.stage || null, exception?.permanent === true);
+    chrome.tabs.sendMessage(tab.id, { type: "getCookieOutcome" }, (result) => {
+      if (chrome.runtime.lastError || !result?.outcome) return;
+      cookieOutcomeEl.textContent = {
+        "dismissed-after-attempt": "Cookie banner dismissed after rejection attempt",
+        attempted: "Cookie rejection attempted",
+        "hide-fallback": "Cookie banner hidden without a rejection"
+      }[result.outcome] || "";
+    });
   }
 
   totalCountEl.textContent = formatCount(data.totalBlocked);
   setRowsEnabled(data.enabled);
-  maybeShowPromos(data);
+  const lastUpdate = data.lastFilterUpdate ? new Date(data.lastFilterUpdate).toLocaleDateString() : null;
+  const listSource = lastUpdate ? `Last successful list update ${lastUpdate}` : "Using bundled lists";
+  filterHealthEl.textContent = data.filterUpdateError ? `List update failed. ${listSource}.` : listSource;
 
   if (currentTabId !== null) {
     chrome.runtime.sendMessage(
@@ -120,71 +134,6 @@ async function init() {
     );
   }
 
-  // Wire promo actions
-  reviewCtaBtn?.addEventListener("click", () => {
-    chrome.storage.local.set({ reviewPromptDone: true }, () => {
-      reviewPromptEl.hidden = true;
-      maybeHidePromoContainer();
-      chrome.tabs.create({
-        url: "https://chromewebstore.google.com/detail/quietbrowse/ocpnpehnpilheklhbicgaaacaogipaml/reviews"
-      });
-    });
-  });
-  reviewDismissBtn?.addEventListener("click", () => {
-    chrome.storage.local.set({ reviewPromptDone: true }, () => {
-      reviewPromptEl.hidden = true;
-      maybeHidePromoContainer();
-    });
-  });
-  shareBtn?.addEventListener("click", async () => {
-    const countText = totalCountEl.textContent || "10k";
-    const text = `I've blocked ${countText} trackers with QuietBrowse — zero data collection. Try it: https://chromewebstore.google.com/detail/quietbrowse/ocpnpehnpilheklhbicgaaacaogipaml`;
-    try {
-      if (navigator.share && typeof navigator.share === "function") {
-        await navigator.share({ text });
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-        flashHint(i18n("shareCopied"));
-      }
-    } catch {
-      /* ignore */
-    }
-    chrome.storage.local.set({ milestoneShared_10000: true }, () => {
-      shareCardEl.hidden = true;
-      maybeHidePromoContainer();
-    });
-  });
-}
-
-function maybeShowPromos(data) {
-  // Ensure installAt is set for older installs
-  if (!data.installAt) chrome.storage.local.set({ installAt: Date.now() });
-  const now = Date.now();
-  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-  const hasTime = data.installAt && now - data.installAt >= sevenDaysMs;
-  const ENOUGH_BLOCKS = 1000;
-  const hasBlocks = (data.totalBlocked || 0) >= ENOUGH_BLOCKS;
-
-  const showReview = !data.reviewPromptDone && (hasTime || hasBlocks);
-
-  // Milestone: 10,000 trackers blocked
-  const showShare = !data.milestoneShared_10000 && (data.totalBlocked || 0) >= 10000;
-  if (showShare) {
-    const pretty = formatCount(data.totalBlocked);
-    if (shareTitleEl) {
-      shareTitleEl.textContent = i18n("milestoneTitle", pretty);
-    }
-    shareCardEl.hidden = false;
-  } else {
-    shareCardEl.hidden = true;
-  }
-
-  reviewPromptEl.hidden = !showReview;
-  promoSection.hidden = reviewPromptEl.hidden && shareCardEl.hidden;
-}
-
-function maybeHidePromoContainer() {
-  if (reviewPromptEl.hidden && shareCardEl.hidden) promoSection.hidden = true;
 }
 
 function loadTrustScore(tabId) {
@@ -194,6 +143,7 @@ function loadTrustScore(tabId) {
       trustRowEl.className = "trust-row trust-unknown";
       trustScoreEl.textContent = "—";
       trustLabelEl.textContent = i18n("trustUnavailable");
+      if (trustDetailEl) trustDetailEl.hidden = true;
       return;
     }
     if (!protectionEnabled) {
@@ -204,25 +154,29 @@ function loadTrustScore(tabId) {
   });
 }
 
-function showTrust({ level, trustScore, reasons }) {
+function showTrust({ level, trustScore, reasons, activityNote }) {
   trustRowEl.hidden = false;
   trustRowEl.className = "trust-row trust-" + level;
+  const reasonText = (reasons || []).join(" · ");
+  const safety = document.getElementById("safetyReasons");
+  if (safety) safety.textContent = reasonText;
+  if (trustDetailEl) trustDetailEl.hidden = false;
+  if (trustReasonsEl) trustReasonsEl.textContent = reasonText;
+  if (trustActivityEl) trustActivityEl.textContent = activityNote || "";
   if (level === "off") {
     trustScoreEl.textContent = i18n("trustScoreOff");
     trustLabelEl.textContent = i18n(TRUST_KEYS.off);
     return;
   }
-  trustScoreEl.textContent = trustScore + "/100";
-  trustLabelEl.textContent = i18n(TRUST_KEYS[level] || level);
-  if (reasons?.length) {
-    trustRowEl.title = reasons.join("\n");
-  }
+  trustScoreEl.textContent = trustScore == null ? "—" : trustScore + "/100";
+  trustLabelEl.textContent = i18n(TRUST_KEYS[level] || "trustUnknown");
 }
 
 function updateShieldButton(enabled) {
   shieldBtn.classList.toggle("on", enabled);
   shieldBtn.classList.toggle("off", !enabled);
   shieldBtn.title = i18n(enabled ? "shieldBtnOn" : "shieldBtnOff");
+  shieldBtn.setAttribute("aria-pressed", String(enabled));
 }
 
 function applySiteMode(mode) {
@@ -342,9 +296,32 @@ function learnedBlockedHas(domain) {
 
 function setRowsEnabled(enabled) {
   siteRow.classList.toggle("disabled", !enabled || currentDomain === null);
+  siteModeSelect.disabled = !enabled || !currentDomain;
   const mode = siteModeSelect.value;
   zapBtn.disabled = !enabled || !currentDomain || mode === "off";
-  fixSiteBtn.disabled = !currentDomain;
+  fixSiteBtn.disabled = !enabled || !currentDomain || mode === "off" || currentRecoveryStage === "page";
+  allowAdsBtn.disabled = !enabled || !currentDomain;
+}
+
+function showRecoveryStage(stage, permanent = false) {
+  currentRecoveryStage = stage;
+  pageFixActiveEl.hidden = !stage;
+  recoveryActionsEl.hidden = !stage;
+  keepFixBtn.hidden = !stage || permanent;
+  if (stage === "cosmetics") {
+    pageFixActiveEl.textContent = permanent
+      ? "Cosmetic filtering is paused for this site."
+      : "Cosmetic filtering is paused for 24 hours.";
+    fixSiteBtn.textContent = "Try stronger page fix";
+  } else if (stage === "page") {
+    pageFixActiveEl.textContent = permanent
+      ? "Page filtering and scriptlets are paused for this site."
+      : "Page filtering and scriptlets are paused for 24 hours.";
+    fixSiteBtn.textContent = "Strongest page fix active";
+  } else {
+    fixSiteBtn.textContent = "Fix page display";
+  }
+  setRowsEnabled(protectionEnabled);
 }
 
 function flashHint(text) {
@@ -389,15 +366,34 @@ fixSiteBtn.addEventListener("click", () => {
         flashHint(res?.error || i18n("hintCouldNotFixSite"));
         return;
       }
-      siteModeSelect.value = "off";
+      showRecoveryStage(res.stage);
       setRowsEnabled(protectionEnabled);
       flashHint(
         reportCheck.checked
-          ? i18n("hintSitePausedReport")
-          : i18n("hintSitePaused")
+          ? "Page display fix applied. Local report saved."
+          : "Page display fix applied."
       );
+      if (currentTabId !== null) chrome.tabs.reload(currentTabId).catch(() => {
+        flashHint("Page display fix applied. Reload the page to finish.");
+      });
     }
   );
+});
+
+restoreFixBtn.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "clearContentException", domain: currentDomain }, (res) => {
+    if (!res?.ok) return flashHint(res?.error || "Could not restore page protection.");
+    showRecoveryStage(null);
+    if (currentTabId !== null) chrome.tabs.reload(currentTabId);
+  });
+});
+
+keepFixBtn.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "keepContentException", domain: currentDomain }, (res) => {
+    if (!res?.ok) return flashHint(res?.error || "Could not save the fix.");
+    showRecoveryStage(currentRecoveryStage, true);
+    flashHint("Page display fix saved for this site.");
+  });
 });
 
 zapBtn.addEventListener("click", () => {

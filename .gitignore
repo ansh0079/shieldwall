@@ -12,3 +12,4 @@ trustcheck/.beta-chrome-profile/
 Thumbs.db
 _metadata/
 package-lock.json
+trustcheck/dist/

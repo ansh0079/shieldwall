@@ -1,200 +1,73 @@
-import { registrableDomain, isSearchEngine } from "./lib/domain.js";
-import { urlSignals, pageSignals } from "./lib/heuristics.js";
-import { domainAge, firstArchived, safeBrowsing, reviewLinks } from "./lib/providers.js";
-import { historySignals, historyLines } from "./lib/history.js";
-import { priceContext, priceSignals } from "./lib/price.js";
-import { buildReport } from "./lib/score.js";
-import { extractCompanyNumber, fetchCompany, companySignals } from "./lib/companies.js";
-import { fetchSummary, fetchCheck, registerClient, submitReport, buyerSignals, buyerFeedback } from "./lib/buyers.js";
+import { registrableDomain } from "./lib/domain.js";
+import { sameDocument } from "./lib/url.js";
+import { analyze } from "./lib/analyze.js";
+import { EvidenceCache, chromeStore } from "./lib/cache.js";
+import { TabGuard } from "./lib/tabguard.js";
+import { ProviderError } from "./lib/http.js";
+import { domainAge, firstArchived, safeBrowsing, trustpilot } from "./lib/providers.js";
+import { fetchCompany } from "./lib/companies.js";
+import { fetchSummary, fetchCheck, submitReport, enroll, eraseMyReports } from "./lib/buyers.js";
+import { priceContext } from "./lib/price.js";
+import { DEFAULT_SETTINGS, DEFAULT_BACKEND } from "./lib/settings.js";
 import { createReminder, handleReminderAnswer } from "./lib/reminders.js";
 import { isRetailPage } from "./lib/retail.js";
-import { ignoreClosedTab } from "./lib/tab-race.js";
 
-const TTL = 6 * 3600 * 1000;
-const NET_CACHE_VERSION = 2; // v2 removes paid Trustpilot API data from cached scoring
-const pageScans = new Map(); // tabId -> scan
-const buyerCache = new Map(); // domain -> {at,sum}
-const COLORS = { trusted: "#16a34a", caution: "#d97706", risky: "#dc2626", unverified: "#6b7280" };
-const DEFAULT_BACKEND = "https://trustcheck.soloinvestor-ai.com";
+const providers = { domainAge, firstArchived, safeBrowsing, trustpilot, fetchCompany, fetchSummary, fetchCheck };
+const cache = new EvidenceCache(chromeStore(chrome.storage.local, ["ev:", "fail:", "net:", "co:"]));
+const guard = new TabGuard();
+const pageScans = new Map();                       // tabId -> { url, scan }  (a scan only applies to the URL it came from)
+const COLORS = { lower: "#16a34a", caution: "#d97706", risky: "#dc2626", dangerous: "#7f1d1d", limited: "#6b7280" };
+const quiet = (p) => Promise.resolve(p).catch(() => {});   // closed tabs reject action/tab calls
 
-async function reportBackend() {
-  const { backend = "" } = await chrome.storage.local.get({ backend: "" });
-  return backend || DEFAULT_BACKEND;
-}
+cache.prune().catch(() => {});                     // drop expired + legacy cache entries on service-worker start
 
 async function settings() {
-  const s = await chrome.storage.local.get({ sbKey: "", backend: "", chKey: "" });
-  s.backend = await reportBackend();
+  const s = await chrome.storage.local.get(DEFAULT_SETTINGS);
+  if (!s.backend) s.backend = DEFAULT_BACKEND;
   return s;
 }
-
-async function analyze(url, tabId, force = false) {
-  let u;
-  try { u = new URL(url); } catch { return null; }
-  if (!/^https?:$/.test(u.protocol)) return null;
-  const domain = registrableDomain(u.hostname);
-  if (isSearchEngine(u.hostname)) return { neutral: true, url, domain, verdict: "neutral", signals: [], links: [], feedback: [], checkedAt: Date.now() };
-  const scan = pageScans.get(tabId);
-  if (tabId >= 0 && (!scan || scan.pageUrl !== url || !isRetailPage(scan))) return null;
-  const cacheKey = "net:" + domain;
-  const { sbKey, backend, chKey } = await settings();
-
-  // Network results are per-domain and cached; local/page signals are recomputed.
-  let net = (await chrome.storage.local.get(cacheKey))[cacheKey];
-  if (force || !net || net.version !== NET_CACHE_VERSION || Date.now() - net.at > TTL) {
-    const tasks = [domainAge(domain)];
-    const archiveTask = firstArchived(domain);
-    tasks.push(sbKey ? safeBrowsing(u.origin + "/", sbKey) : Promise.resolve(null));
-    const [age, sb, arch] = await Promise.allSettled([...tasks, archiveTask]);
-    net = {
-      version: NET_CACHE_VERSION,
-      at: Date.now(),
-      signals: [
-        ...(age.status === "fulfilled" ? age.value : [{ id: "age", label: "Domain age unavailable", status: "info", points: 0, detail: "Lookup failed: " + String(age.reason?.message || age.reason).slice(0, 160) }]),
-        ...(sb.value ? sb.value.signals : [])
-      ],
-      registered: age.status === "fulfilled" ? age.value[0]?.since || null : null,
-      archived: arch.status === "fulfilled" ? arch.value : null,
-      flagged: !!sb.value?.flagged,
-      errors: [sb].filter((r) => r.status === "rejected").map((r) => String(r.reason))
-    };
-    await chrome.storage.local.set({ [cacheKey]: net });
+const HIDE_MS = 30 * 24 * 3600 * 1000;
+async function badgeUi(domain) {
+  const s = await settings();
+  let hidden = false;
+  if (domain) {
+    const k = "hide:" + domain, at = (await chrome.storage.local.get(k))[k];
+    if (at && Date.now() - at < HIDE_MS) hidden = true;
+    else if (at) await chrome.storage.local.remove(k);            // expired
   }
+  return { mode: s.badgeMode || "auto", hidden };
+}
+async function priceFor(domain) {
+  const pk = "price:" + domain, pc = (await chrome.storage.session.get(pk))[pk];
+  return pc && Date.now() - pc.at < 2 * 3600 * 1000 ? pc : null;
+}
 
-  const number = scan ? extractCompanyNumber((scan.legal || []).join(" ")) : null;
-
-  // Cloud backend check: unified Safe Browsing, Companies House, Trustpilot & Buyer reports
-  let buyer = null;
-  let backendVerified = false;
-  let serverSb = null;
-  let serverCompanyProfile = null;
-  let serverReviews = null;
-
-  if (backend) {
-    const c = buyerCache.get(domain);
-    if (!force && c && Date.now() - c.at < 5 * 60 * 1000) {
-      buyer = c.sum;
-      backendVerified = !!c.verified;
-      serverSb = c.sb || null;
-      serverCompanyProfile = c.profile || null;
-      serverReviews = c.reviews || null;
-    } else {
-      try {
-        const checkData = await fetchCheck(backend, domain, { url: u.origin + "/", companyNumber: number || "", fresh: force });
-        buyer = checkData.summary || null;
-        backendVerified = !!checkData.verifiedMerchant;
-        serverSb = checkData.safeBrowsing || null;
-        serverCompanyProfile = checkData.company?.profile || null;
-        serverReviews = checkData.reviews || null;
-        buyerCache.set(domain, { at: Date.now(), sum: buyer, verified: backendVerified, sb: serverSb, profile: serverCompanyProfile, reviews: serverReviews });
-      } catch {
-        try {
-          buyer = await fetchSummary(backend, domain);
-          buyerCache.set(domain, { at: Date.now(), sum: buyer, verified: false, sb: null, profile: null, reviews: null });
-        } catch { /* server down: skip */ }
-      }
-    }
+async function publish(tabId, report) {
+  if (!report || report.neutral) quiet(chrome.action.setBadgeText({ tabId, text: "" }));
+  else {
+    quiet(chrome.action.setBadgeText({ tabId, text: report.verdict === "limited" ? "?" : report.verdict === "dangerous" ? "!" : String(report.score) }));
+    quiet(chrome.action.setBadgeBackgroundColor({ tabId, color: COLORS[report.verdict] }));
   }
-
-  // Incorporate server-proxied Safe Browsing if client key is omitted
-  if (!sbKey && serverSb) {
-    net.signals = [...net.signals.filter((s) => s.id !== "sb"), ...serverSb.signals];
-    if (serverSb.flagged) net.flagged = true;
+  if (report) {
+    await chrome.storage.session?.set({ ["report:" + tabId]: report });
+    quiet(chrome.tabs.sendMessage(tabId, { type: "report", report }));
   }
+}
 
-  // Companies House: verify the company number shown in the shop's footer (cached 24h per number).
-  let companySigs = [];
-  if (chKey && number) {
-    const ck = "co:" + number;
-    let rec = (await chrome.storage.local.get(ck))[ck];
-    if (!rec || Date.now() - rec.at > 24 * 3600 * 1000) {
-      try { rec = { at: Date.now(), profile: await fetchCompany(number, chKey) }; await chrome.storage.local.set({ [ck]: rec }); }
-      catch { rec = null; }
-    }
-    if (rec) companySigs = companySignals({ number, profile: rec.profile, haystack: `${scan.title} ${domain} ${(scan.legal || []).join(" ")}` });
-  } else if (!chKey && serverCompanyProfile && number) {
-    companySigs = companySignals({ number, profile: serverCompanyProfile, haystack: `${scan?.title || ""} ${domain} ${(scan?.legal || []).join(" ")}` });
-  } else if ((chKey || backend) && scan?.isShop && !number) {
-    companySigs = [{ id: "company", label: "No company registration number shown", status: "info", points: 0, detail: "UK traders normally show their company number in the site footer." }];
-  }
-
-  if (backendVerified) {
-    companySigs.push({ id: "merchant-verified", label: "Domain ownership verified", status: "info", points: 0, detail: "The operator proved control of this domain. This does not verify fulfilment or product quality." });
-  }
-
-  const pk = "price:" + domain;
-  const pc = (await chrome.storage.session.get(pk))[pk];
-  const priceSigs = pc && Date.now() - pc.at < 2 * 3600 * 1000 ? priceSignals(pc) : [];
-  const signals = [...priceSigs, ...urlSignals(url), ...pageSignals(scan && { ...scan, https: u.protocol === "https:" }), ...net.signals, ...historySignals(net), ...buyerSignals(buyer), ...companySigs];
-  if (!chKey && !serverCompanyProfile && !backend) signals.push({ id: "co-off", label: "UK company check not connected", status: "info", points: 0, detail: "Add a free Companies House API key in Options to verify a shop's registered company." });
-  if (!sbKey && !serverSb && !backend) signals.push({ id: "sb-off", label: "Malware/phishing database not connected", status: "info", points: 0, detail: "Add a free Google Safe Browsing key in Options for stronger protection." });
-
-  // Direct Trustpilot link is always present even if reviews API is unconfigured (Step 1)
-  const defaultReviews = serverReviews || {
-    source: "Trustpilot",
-    score: null,
-    count: null,
-    themes: [],
-    url: `https://www.trustpilot.com/review/${encodeURIComponent(domain)}`
-  };
-
-  const report = buildReport({
-    url,
-    domain,
-    signals,
-    reviews: defaultReviews,
-    merchantRating: scan?.merchantRating || null,
-    links: reviewLinks(domain),
-    flagged: net.flagged,
-    feedback: buyerFeedback(buyer),
-    buyerTotal: buyer && !buyer.hidden ? buyer.total : 0,
-    buyerOutcomes: buyer && !buyer.hidden ? buyer.outcomes || null : null,
-    sixMonthNonDelivery: buyer?.sixMonthNonDelivery || 0,
-    sixMonthNotMatched: buyer?.sixMonthNotMatched || 0,
-    sixMonthDelivered: buyer?.sixMonthDelivered || 0,
-    sixMonthObservedTotal: buyer?.sixMonthObservedTotal || 0,
-    sixMonthOutcomes: buyer?.sixMonthOutcomes || null,
-    minReports: buyer?.minReports || 3
-  });
-  const purchase = (await chrome.storage.local.get("purchase:" + domain))["purchase:" + domain];
+async function attachPurchase(report) {
+  if (!report?.domain) return report;
+  const key = "purchase:" + report.domain, purchase = (await chrome.storage.local.get(key))[key];
   if (purchase && Date.now() - purchase.at < 180 * 86400000) report.purchase = purchase;
-  report.backendOn = !!backend;
-  report.registered = net.registered || null; report.archived = net.archived || null;
-  report.history = historyLines(net);
   return report;
 }
 
-async function refresh(tabId, url, force) {
-  const report = await analyze(url, tabId, force);
-  // Checks can outlive a tab or an SPA navigation; never publish stale results.
-  let tab;
-  try { tab = await chrome.tabs.get(tabId); } catch { return null; }
-  if (tab.url !== url) return null;
-  if (report && !report.neutral) {
-    const currentScan = pageScans.get(tabId);
-    if (!currentScan || currentScan.pageUrl !== url || !isRetailPage(currentScan)) return null;
-  }
-  if (!report) {
-    try { await chrome.action.setBadgeText({ tabId, text: "" }); } catch { /* tab closed */ }
-    await chrome.storage.session?.remove("report:" + tabId);
-    void ignoreClosedTab(() => chrome.tabs.sendMessage(tabId, { type: "report", report: { neutral: true } }));
-    return null;
-  }
-  if (report.neutral) {
-    try { await chrome.action.setBadgeText({ tabId, text: "" }); } catch { return null; }
-    await chrome.storage.session?.set({ ["report:" + tabId]: report });
-    void ignoreClosedTab(() => chrome.tabs.sendMessage(tabId, { type: "report", report }));
-    return report;
-  }
-  try {
-    await chrome.action.setBadgeText({ tabId, text: report.verdict === "unverified" ? "?" : String(report.score) });
-    await chrome.action.setBadgeBackgroundColor({ tabId, color: COLORS[report.verdict] });
-  } catch { return null; }
-  // Alert only when a previously assessed shop becomes high risk on this device.
+async function maybeRiskAlert(report) {
+  if (!report?.domain || report.neutral) return;
   const baselineKey = "risk-baseline:" + report.domain;
   const baseline = (await chrome.storage.local.get(baselineKey))[baselineKey];
-  if (baseline?.verdict && baseline.verdict !== "risky" && report.verdict === "risky" &&
-      Date.now() - (baseline.alertedAt || 0) > 24 * 3600 * 1000 && chrome.notifications) {
+  const severe = report.verdict === "risky" || report.verdict === "dangerous";
+  const wasOk = baseline?.verdict && baseline.verdict !== "risky" && baseline.verdict !== "dangerous";
+  if (wasOk && severe && Date.now() - (baseline.alertedAt || 0) > 24 * 3600 * 1000 && chrome.notifications) {
     try {
       await chrome.notifications.create("risk-change:" + report.domain, {
         type: "basic",
@@ -206,67 +79,81 @@ async function refresh(tabId, url, force) {
     } catch { /* notifications may be disabled */ }
   }
   await chrome.storage.local.set({ [baselineKey]: { verdict: report.verdict, alertedAt: baseline?.alertedAt || 0, checkedAt: Date.now() } });
-  await chrome.storage.session?.set({ ["report:" + tabId]: report });
-  void ignoreClosedTab(() => chrome.tabs.sendMessage(tabId, { type: "report", report }));
+}
+
+// Analyse a tab's page. A result is published only if the tab has not navigated (or closed) in the meantime.
+async function refresh(tabId, url, force) {
+  const token = guard.begin(tabId, url);
+  let report;
+  try {
+    const s = pageScans.get(tabId), scan = s && sameDocument(s.url, url) ? s.scan : null;
+    // Store behaviour: a page must show buying activity before it gets a shop score.
+    if (scan && !isRetailPage(scan)) {
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      if (!tab || !guard.isCurrent(token, tab.url)) return null;
+      const neutral = { neutral: true, url, domain: registrableDomain(new URL(url).hostname), verdict: "neutral", signals: [], links: [], feedback: [], checkedAt: Date.now() };
+      await publish(tabId, neutral);
+      return neutral;
+    }
+    const domain = registrableDomain(new URL(url).hostname);
+    report = await analyze(url, { cache, providers, settings: await settings() },
+      { scan, price: domain ? await priceFor(domain) : null, force, signal: token.signal });
+  } catch (e) {
+    if (!(e instanceof ProviderError && e.kind === "aborted")) console.warn("BeforeYouBuy: analysis failed:", e?.message);
+    return null;
+  }
+  if (report && !report.neutral) {
+    report.ui = await badgeUi(report.domain);   // on-page badge preferences
+    await attachPurchase(report);
+    await maybeRiskAlert(report);
+  }
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || !guard.isCurrent(token, tab.url)) return null;    // stale: the tab moved on
+  await publish(tabId, report);
   return report;
 }
 
 chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
-  if (info.status === "loading" || info.url) {
-    pageScans.delete(tabId);
-    void ignoreClosedTab(() => chrome.action.setBadgeText({ tabId, text: "" }));
-    chrome.storage.session?.remove("report:" + tabId)?.catch(() => {});
-    void ignoreClosedTab(() => chrome.tabs.sendMessage(tabId, { type: "report", report: { neutral: true } }));
+  if (info.status === "loading" || info.url) {                  // navigation started / SPA URL change: in-flight work is stale
+    guard.invalidate(tabId);
+    quiet(chrome.action.setBadgeText({ tabId, text: "" }));
+    if (info.status === "loading") pageScans.delete(tabId);
   }
-  if ((info.status === "complete" || info.url) && tab.url) {
-    try {
-      if (isSearchEngine(new URL(tab.url).hostname)) refresh(tabId, tab.url, false).catch(() => {});
-    } catch { /* internal browser page */ }
-  }
+  if ((info.status === "complete" || info.url) && tab.url) refresh(tabId, tab.url, false);
 });
-chrome.tabs.onRemoved.addListener((id) => { pageScans.delete(id); chrome.storage.session?.remove("report:" + id)?.catch(() => {}); });
+chrome.tabs.onRemoved.addListener((id) => { guard.forget(id); pageScans.delete(id); quiet(chrome.storage.session?.remove("report:" + id)); });
 
 async function rememberPurchase(tabUrl, scan) {
-  if (!scan.purchaseObserved) return;
-  const domain = registrableDomain(new URL(tabUrl).hostname), key = "purchase:" + domain;
+  if (!scan?.purchaseObserved) return;
+  let domain;
+  try { domain = registrableDomain(new URL(tabUrl).hostname); } catch { return; }
+  const key = "purchase:" + domain;
   const old = (await chrome.storage.local.get(key))[key];
-  if (!old || Date.now() - old.at > 86400000) {
-    const purchaseObj = {
-      id: crypto.randomUUID(),
-      at: Date.now(),
-      reported: false,
-      amount: scan.orderAmount || null,
-      storefrontName: scan.storefrontName || null
-    };
-    await chrome.storage.local.set({ [key]: purchaseObj });
-
-    // Step 2: Store local reminder 14 days in the future without personal data
-    try {
-      const { orderReminders = true, reminders = [] } = await chrome.storage.local.get({ orderReminders: true, reminders: [] });
-      if (!orderReminders) return;
-      if (!reminders.some((r) => r.domain === domain && Math.abs(r.createdAt - Date.now()) < 7 * 86400000)) {
-        const rem = await createReminder({
-          domain,
-          amount: scan.orderAmount,
-          orderId: scan.orderId,
-          storefrontName: scan.storefrontName
-        });
-        reminders.push(rem);
-        await chrome.storage.local.set({ reminders });
-      }
-    } catch { /* storage unavailable */ }
-  }
+  if (old && Date.now() - old.at <= 86400000) return;
+  const purchaseObj = {
+    id: crypto.randomUUID(),
+    at: Date.now(),
+    reported: false,
+    amount: scan.orderAmount || null,
+    storefrontName: scan.storefrontName || null
+  };
+  await chrome.storage.local.set({ [key]: purchaseObj });
+  try {
+    const { orderReminders = true, reminders = [] } = await chrome.storage.local.get({ orderReminders: true, reminders: [] });
+    if (!orderReminders) return;
+    if (!reminders.some((r) => r.domain === domain && Math.abs(r.createdAt - Date.now()) < 7 * 86400000)) {
+      const rem = await createReminder({
+        domain,
+        amount: scan.orderAmount,
+        orderId: scan.orderId,
+        storefrontName: scan.storefrontName
+      });
+      reminders.push(rem);
+      await chrome.storage.local.set({ reminders });
+    }
+  } catch { /* storage unavailable */ }
 }
 
-async function reportCredential(backend) {
-  const { reportCredential: stored } = await chrome.storage.local.get({ reportCredential: null });
-  if (stored?.installId && stored?.token && stored?.backend === backend) return stored;
-  const credential = { ...(await registerClient(backend)), backend };
-  await chrome.storage.local.set({ reportCredential: credential, installId: credential.installId });
-  return credential;
-}
-
-// Step 2: 14-day reminder alarm & notification processor
 try {
   chrome.alarms?.create("check_order_reminders", { periodInMinutes: 60 });
 } catch { /* alarms unsupported */ }
@@ -312,22 +199,29 @@ async function saveReminderAnswer(reminders, remIndex, answer, backend = "") {
   reminders[remIndex] = updatedReminder;
   await chrome.storage.local.set({ reminders });
   if (backend && report) {
-    const credential = await reportCredential(backend);
-    await submitReport(backend, credential.installId, credential.token, report.domain, report.outcome, report.tags, report.purchaseId, report);
+    const { reportToken } = await chrome.storage.local.get({ reportToken: "" });
+    let token = reportToken;
+    const ensure = async () => { token = await enroll(backend); await chrome.storage.local.set({ reportToken: token }); };
+    if (!token) await ensure();
+    try { await submitReport(backend, token, report.domain, report.outcome, report.tags || []); }
+    catch (e) { if (e.status !== 401) throw e; await ensure(); await submitReport(backend, token, report.domain, report.outcome, report.tags || []); }
+    await cache.store.remove(["ev:buy:" + report.domain, "ev:chk:" + report.domain]);
   }
   return updatedReminder;
 }
 
-// Each order creates at most two reminder notifications. Answers are collected on an extension page.
 if (chrome.notifications?.onButtonClicked) {
   chrome.notifications.onButtonClicked.addListener(async (notifId, buttonIndex) => {
     try {
-      const { reminders = [], backend = "" } = await chrome.storage.local.get({ reminders: [], backend: "" });
+      const { reminders = [] } = await chrome.storage.local.get({ reminders: [] });
       const remIndex = reminders.findIndex((r) => r.id === notifId);
       if (remIndex === -1) return;
       chrome.notifications.clear(notifId);
       if (buttonIndex === 0) await chrome.tabs.create({ url: chrome.runtime.getURL(`reminder.html?id=${encodeURIComponent(notifId)}`) });
-      else await saveReminderAnswer(reminders, remIndex, "not_yet", backend);
+      else {
+        const s = await settings();
+        await saveReminderAnswer(reminders, remIndex, "not_yet", s.backend);
+      }
     } catch { /* ignore */ }
   });
 }
@@ -359,8 +253,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     return true;
   }
   if (msg.type === "scan" && sender.tab) {
-    if (msg.scan?.pageUrl !== sender.tab.url) return;
-    pageScans.set(sender.tab.id, msg.scan);
+    pageScans.set(sender.tab.id, { url: sender.tab.url, scan: msg.scan });
     (async () => {
       try { await rememberPurchase(sender.tab.url, msg.scan); } catch { /* invalid tab URL or storage unavailable */ }
       await refresh(sender.tab.id, sender.tab.url, false);
@@ -368,10 +261,11 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   } else if (msg.type === "answerReminder") {
     (async () => {
       try {
-        const { reminders = [], backend = "" } = await chrome.storage.local.get({ reminders: [], backend: "" });
-        const remIndex = reminders.findIndex((r) => r.id === msg.id);
+        const stored = await chrome.storage.local.get({ reminders: [] });
+        const s = await settings();
+        const remIndex = stored.reminders.findIndex((r) => r.id === msg.id);
         if (remIndex === -1) return reply({ ok: false, error: "Reminder not found" });
-        await saveReminderAnswer(reminders, remIndex, msg.answer, backend);
+        await saveReminderAnswer(stored.reminders, remIndex, msg.answer, s.backend);
         reply({ ok: true });
       } catch (e) { reply({ ok: false, error: String(e.message || e) }); }
     })();
@@ -379,38 +273,55 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   } else if (msg.type === "lookup") {
     // Hover lookup from a search page: quick check of one result's domain (no page scan available).
     (async () => {
+      const domain = registrableDomain(new URL(msg.url).hostname);
       // Remember how this listing's price compares with the results page, so the shop page can show it too (2h).
       const ctx = msg.priceInfo ? priceContext(msg.priceInfo) : null;
-      if (ctx) {
-        try { const d = registrableDomain(new URL(msg.url).hostname); await chrome.storage.session.set({ ["price:" + d]: { ...ctx, at: Date.now() } }); } catch { /* bad url */ }
-      }
-      const r = await analyze(msg.url, -1, false);
+      if (ctx && domain) await chrome.storage.session.set({ ["price:" + domain]: { ...ctx, at: Date.now() } });
+      const r = await analyze(msg.url, { cache, providers, settings: await settings() }, { price: ctx || (domain ? await priceFor(domain) : null), hover: true });
       reply(r ? { ...r, quick: true } : { error: "could not read this seller's address" });
     })().catch((e) => reply({ error: String(e?.message || e).slice(0, 200) }));
     return true;
+  } else if (msg.type === "hideBadge" && sender.tab && typeof msg.domain === "string" && msg.domain.length < 260) {
+    chrome.storage.local.set({ ["hide:" + msg.domain]: Date.now() });   // user asked: no on-page badge on this site for 30 days
   } else if (msg.type === "submitReport") {
     (async () => {
       try {
-        const backend = await reportBackend();
-        if (!backend) return reply({ ok: false, error: "Start the local report server or set a server in Options" });
-        const credential = await reportCredential(backend);
-        const key = "purchase:" + msg.domain, purchase = (await chrome.storage.local.get(key))[key];
-        const purchaseId = purchase && !purchase.reported && purchase.id === msg.purchaseId ? purchase.id : null;
-        await submitReport(backend, credential.installId, credential.token, msg.domain, msg.outcome, msg.tags || [], purchaseId, { details: msg.details || "" });
-        if (purchaseId) await chrome.storage.local.set({ [key]: { ...purchase, reported: true } });
-        buyerCache.delete(msg.domain);
+        const s = await settings();
+        const backend = s.backend;
+        if (!backend) return reply({ ok: false, error: "No report server set in Options" });
+        const { reportToken } = await chrome.storage.local.get({ reportToken: "" });
+        let token = reportToken;
+        const ensure = async () => { token = await enroll(backend); await chrome.storage.local.set({ reportToken: token }); };
+        if (!token) await ensure();                                   // first report: get a server-issued identity
+        try { await submitReport(backend, token, msg.domain, msg.outcome, msg.tags || []); }
+        catch (e) { if (e.status !== 401) throw e; await ensure(); await submitReport(backend, token, msg.domain, msg.outcome, msg.tags || []); }   // credential revoked or lost: re-enrol once
+        await cache.store.remove(["ev:buy:" + msg.domain, "ev:chk:" + msg.domain]);
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab?.url) refresh(tab.id, tab.url, false).catch(() => {});
         reply({ ok: true });
       } catch (e) { reply({ ok: false, error: String(e.message || e) }); }
     })();
     return true;
+  } else if (msg.type === "eraseReports") {
+    (async () => {                                                   // right to erasure: remove my identity and everything it reported
+      try {
+        const s = await settings();
+        const { reportToken } = await chrome.storage.local.get({ reportToken: "" });
+        if (s.backend && reportToken) await eraseMyReports(s.backend, reportToken);
+        await chrome.storage.local.remove(["reportToken", "installId"]);
+        reply({ ok: true });
+      } catch (e) { reply({ ok: false, error: String(e.message || e) }); }
+    })();
+    return true;
   } else if (msg.type === "get" || msg.type === "recheck") {
     (async () => {
-      try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        reply(tab?.url ? await refresh(tab.id, tab.url, msg.type === "recheck") : null);
-      } catch { reply(null); }
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.url) return reply(null);
+      if (msg.type === "get") {                                  // reuse a fresh report for this exact page instead of racing a new analysis
+        const c = (await chrome.storage.session.get("report:" + tab.id))["report:" + tab.id];
+        if (c && c.url && sameDocument(c.url, tab.url) && Date.now() - c.checkedAt < 60_000) return reply(c);
+      }
+      reply(await refresh(tab.id, tab.url, msg.type === "recheck"));
     })();
     return true;
   }

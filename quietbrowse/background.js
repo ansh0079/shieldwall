@@ -356,6 +356,14 @@ function sanitizeBackup(data) {
     }
   }
 
+  if (isPlainObject(data.siteContentExceptions)) {
+    patch.siteContentExceptions = Object.fromEntries(
+      Object.entries(data.siteContentExceptions)
+        .filter(([domain, value]) => validRecoveryDomain(domain) &&
+          (value === true || (isPlainObject(value) && ["cosmetics", "page"].includes(value.stage))))
+    );
+  }
+
   if (isPlainObject(data.learnedSeen)) {
     patch.learnedSeen = {};
     for (const [domain, sites] of Object.entries(data.learnedSeen)) {
@@ -534,6 +542,13 @@ async function undoLastAction() {
       await syncSiteModeRules(siteModes);
       await syncScriptlets();
       await notifyContentScripts();
+    } else if (action.type === "contentException") {
+      const previousStage = action.previous === true ? "page" : action.previous?.stage;
+      await setContentException(
+        action.domain,
+        previousStage || null,
+        action.previous?.permanent === true
+      );
     } else if (action.type === "customRuleAdd") {
       customRules = customRules.filter((r) => r.id !== action.ruleId);
       await chrome.storage.local.set({ customRules });
@@ -734,8 +749,39 @@ async function setSiteMode(domain, mode) {
   }
 }
 
+function validRecoveryDomain(domain) {
+  return typeof domain === "string" && domain.length <= 253 &&
+    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(domain);
+}
+
+async function setContentException(domain, stage, permanent = false) {
+  if (!validRecoveryDomain(domain)) throw new Error("Invalid site hostname");
+  const { siteContentExceptions } = await chrome.storage.local.get({ siteContentExceptions: {} });
+  const next = { ...siteContentExceptions };
+  const previous = next[domain] || null;
+  if (stage) {
+    next[domain] = {
+      stage,
+      createdAt: Date.now(),
+      permanent: permanent === true,
+      expiresAt: permanent ? null : Date.now() + 24 * 60 * 60 * 1000
+    };
+  }
+  else delete next[domain];
+  await chrome.storage.local.set({ siteContentExceptions: next });
+  await syncScriptlets();
+  await notifyContentScripts();
+  await pushRollbackAction({
+    type: "contentException", domain, previous,
+    label: `Undo page display change for ${domain}`
+  });
+}
+
 async function fixSiteBreakage(domain, url, saveReport, note) {
-  await setSiteMode(domain, SITE_MODE.OFF);
+  const stored = await chrome.storage.local.get({ siteContentExceptions: {} });
+  const current = getSiteContentException(domain, stored.siteContentExceptions);
+  const stage = current?.stage === "cosmetics" ? "page" : "cosmetics";
+  await setContentException(domain, stage);
   if (saveReport) {
     const data = await chrome.storage.local.get({ breakageReports: [] });
     const reports = [
@@ -743,7 +789,10 @@ async function fixSiteBreakage(domain, url, saveReport, note) {
         id: Date.now(),
         domain,
         url,
-        note: note || "",
+        note: note || (stage === "cosmetics"
+          ? "Cosmetic filtering paused for 24 hours"
+          : "Page filtering and scriptlets paused for 24 hours"),
+        recoveryStage: stage,
         version: chrome.runtime.getManifest().version,
         at: new Date().toISOString()
       },
@@ -751,7 +800,7 @@ async function fixSiteBreakage(domain, url, saveReport, note) {
     ].slice(0, 100);
     await chrome.storage.local.set({ breakageReports: reports });
   }
-  return { ok: true };
+  return { ok: true, stage };
 }
 
 async function setSiteWhitelisted(domain, whitelisted) {
@@ -883,7 +932,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   } else if (msg.type === "fixSiteBreakage") {
     fixSiteBreakage(msg.domain, msg.url, !!msg.saveReport, msg.note || "")
+      .then((result) => sendResponse(result))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  } else if (msg.type === "clearContentException") {
+    setContentException(msg.domain, null)
       .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true;
+  } else if (msg.type === "keepContentException") {
+    chrome.storage.local.get({ siteContentExceptions: {} }).then((data) => {
+      const current = getSiteContentException(msg.domain, data.siteContentExceptions);
+      return setContentException(msg.domain, current?.stage || "cosmetics", true);
+    }).then(() => sendResponse({ ok: true }))
       .catch((e) => sendResponse({ ok: false, error: e.message }));
     return true;
   } else if (msg.type === "clearBreakageReports") {
@@ -928,6 +989,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.storage.local.get(
       {
         siteModes: {},
+        siteContentExceptions: {},
         zappedElements: {},
         totalBlocked: 0,
         dailyBlocked: {},
@@ -957,8 +1019,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         } catch {
           /* keep stored budget or null */
         }
+        const permissionAudit = {
+          allSites: true,
+          cookies: await hasOptionalPermission("cookies"),
+          downloads: await hasOptionalPermission("downloads")
+        };
         sendResponse({
           siteModes: data.siteModes,
+          siteContentExceptions: data.siteContentExceptions,
           learnedBlocked,
           learnedSeen,
           learnedCandidates,
@@ -988,7 +1056,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           dnrBudget,
           cnameUncloak: data.cnameUncloak !== false,
           scriptletCatalog: data.scriptletCatalog !== false,
-          rollbackActions: data.rollbackActions || []
+          rollbackActions: data.rollbackActions || [],
+          permissionAudit
         });
       }
     );

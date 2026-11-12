@@ -1,14 +1,13 @@
+// requires: node:sqlite
 import test from "node:test";
 import assert from "node:assert/strict";
-import { Store } from "../server/store.js";
-import { createServer } from "../server/server.js";
 import { buildReport } from "../lib/score.js";
+import { signalsFromTrustpilotReviews } from "../lib/providers.js";
 import { createReminder, handleReminderAnswer, DAY } from "../lib/reminders.js";
-import { fetchTrustpilotSummary } from "../server/trustpilot.js";
+import { createServer } from "../server/server.js";
+import { ReportStore } from "../server/store.js";
 
-test("Step 1: Koadclo checkout replay triggers warning notice with Trustpilot review link", () => {
-  const koadcloUrl = "https://koadclo.com/checkout";
-  const domain = "koadclo.com";
+test("Step 1: poor Trustpilot rating becomes a bad signal and triggers the checkout warning condition", () => {
   const reviews = {
     source: "Trustpilot",
     score: 2.0,
@@ -20,176 +19,63 @@ test("Step 1: Koadclo checkout replay triggers warning notice with Trustpilot re
     ],
     url: "https://www.trustpilot.com/review/koadclo.com"
   };
-
+  const { signals } = signalsFromTrustpilotReviews(reviews);
   const report = buildReport({
-    url: koadcloUrl,
-    domain,
-    signals: [
-      { id: "https", label: "Encrypted connection (HTTPS)", status: "good", points: 5 },
-      { id: "age", label: "Domain is 1.5 years old", status: "info", points: 0 }
-    ],
+    url: "https://koadclo.com/checkout",
+    domain: "koadclo.com",
+    signals,
     reviews,
     links: [{ name: "Trustpilot", url: reviews.url }]
   });
-
-  // Verify that the poor Trustpilot rating adds a bad signal
   const tpSig = report.signals.find((s) => s.id === "tp");
   assert.ok(tpSig, "Should contain tp signal");
   assert.equal(tpSig.status, "bad");
-  assert.match(tpSig.label, /Trustpilot rating is 2.0\/5 \(78 reviews\)/);
-
-  // Even though score is in caution range, Trustpilot conditions are met for notice trigger
+  assert.match(tpSig.label, /Trustpilot 2\.0\/5/);
   const hasPoorTrustpilot = report.reviews && report.reviews.score < 3.0 && report.reviews.count >= 5;
   assert.ok(hasPoorTrustpilot, "Must satisfy poor Trustpilot trigger condition");
   assert.equal(report.reviews.url, "https://www.trustpilot.com/review/koadclo.com");
 });
 
-test("Step 2 & 3: 14-day reminder answer feeds 6-month non-delivery warning count", async () => {
-  const store = new Store({ minReports: 2, salt: "test-salt" });
+test("Step 2: 14-day reminder 'no' answer produces a never-arrived report payload", async () => {
   const t0 = 1700000000000;
-
-  // Buyer 1 confirms purchase, answers reminder at day 14: "no" (did not arrive)
-  const rem1 = await createReminder({
-    domain: "koadclo.com",
-    amount: "£59.99",
-    orderId: "ORD-001",
-    storefrontName: "KOAD'CLO",
-    now: t0
-  });
-  const ans1 = handleReminderAnswer(rem1, "no", { now: t0 + 14 * DAY });
-  store.add({
-    installId: "install-buyer-001",
-    domain: ans1.report.domain,
-    outcome: ans1.report.outcome,
-    tags: ans1.report.tags,
-    purchaseId: ans1.report.purchaseId
-  });
-
-  // Buyer 2 confirms purchase, answers reminder at day 14: "no" (did not arrive)
-  const rem2 = await createReminder({
-    domain: "koadclo.com",
-    amount: "£59.99",
-    orderId: "ORD-002",
-    storefrontName: "KOAD'CLO",
-    now: t0 + 2 * DAY
-  });
-  const ans2 = handleReminderAnswer(rem2, "no", { now: t0 + 16 * DAY });
-  store.add({
-    installId: "install-buyer-002",
-    domain: ans2.report.domain,
-    outcome: ans2.report.outcome,
-    tags: ans2.report.tags,
-    purchaseId: ans2.report.purchaseId
-  });
-
-  // Query summary: 6-month threshold (minReports = 2) is met
-  const sum = store.summary("koadclo.com");
-  assert.equal(sum.sixMonthNonDelivery, 2);
-  assert.equal(sum.sixMonthObservedTotal, 2);
-
-  // Report built with this summary generates the 6-month non-delivery warning
-  const rep = buildReport({
-    url: "https://koadclo.com/checkout",
-    domain: "koadclo.com",
-    signals: [],
-    sixMonthNonDelivery: sum.sixMonthNonDelivery,
-    sixMonthObservedTotal: sum.sixMonthObservedTotal,
-    sixMonthOutcomes: sum.sixMonthOutcomes,
-    minReports: sum.minReports
-  });
-
-  const sixMonthSig = rep.signals.find((s) => s.id === "six-month-nondelivery");
-  assert.ok(sixMonthSig);
-  assert.equal(sixMonthSig.status, "bad");
-  assert.equal(sixMonthSig.label, "In the last 6 months, 2 confirmation-observed reports said this shop did not deliver");
-  assert.deepEqual(rep.outcomeSummary, {
-    total: 2,
-    delivered: 0,
-    nonDelivery: 2,
-    notMatched: 0,
-    otherProblems: 0,
-    deliveredPercent: 0,
-    nonDeliveryPercent: 100,
-    notMatchedPercent: 0,
-    otherProblemsPercent: 0,
-    windowDays: 180
-  });
+  const rem = await createReminder({ domain: "koadclo.com", amount: "£59.99", orderId: "ORD-001", storefrontName: "KOAD'CLO", now: t0 });
+  assert.equal(rem.remindAt, t0 + 14 * DAY);
+  const ans = handleReminderAnswer(rem, "no", { now: t0 + 14 * DAY });
+  assert.equal(ans.updatedReminder.status, "answered");
+  assert.equal(ans.report.outcome, "never");
+  assert.deepEqual(ans.report.tags, ["delayed"]);
+  assert.equal(ans.report.domain, "koadclo.com");
+  assert.ok(ans.report.purchaseId);
 });
 
-test("outcome breakdown uses complete categories and hides small samples", () => {
-  const store = new Store({ minReports: 3, salt: "test-salt" });
-  const submit = (n, outcome, tags = []) => store.add({
-    installId: `installation-${n}`,
-    domain: "example.com",
-    outcome,
-    tags,
-    purchaseId: `a1b2c3d4e5f60718293a4b5c6d7e8f9${String(n).padStart(2, "0")}`
-  });
-  submit(1, "ok");
-  submit(2, "never");
-  assert.equal(store.summary("example.com").sixMonthOutcomes, null);
-  submit(3, "problem", ["delayed"]);
-  const sum = store.summary("example.com");
-  assert.deepEqual(sum.sixMonthOutcomes, { delivered: 1, nonDelivery: 1, notMatched: 0, otherProblems: 1 });
-  const report = buildReport({ url: "https://example.com", domain: "example.com", sixMonthOutcomes: sum.sixMonthOutcomes });
-  assert.equal(report.outcomeSummary.nonDeliveryPercent, 33);
-  assert.equal(report.outcomeSummary.otherProblemsPercent, 33);
+test("Step 2: 'not yet' is asked once more, then dismissed, and never submits a report", async () => {
+  const t0 = 1700000000000;
+  const rem = await createReminder({ domain: "shop.example", now: t0 });
+  const first = handleReminderAnswer(rem, "not_yet", { now: t0 + 14 * DAY });
+  assert.equal(first.updatedReminder.status, "pending");
+  assert.equal(first.updatedReminder.askCount, 1);
+  assert.equal(first.report, null);
+  const second = handleReminderAnswer(first.updatedReminder, "not_yet", { now: t0 + 21 * DAY });
+  assert.equal(second.updatedReminder.status, "dismissed");
+  assert.equal(second.report, null);
 });
 
-test("one observed order cannot be counted by two installations", () => {
-  const store = new Store({ salt: "test-salt" });
-  const purchaseId = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
-  store.add({ installId: "installation-one", domain: "example.com", outcome: "ok", purchaseId });
-  assert.throws(() => store.add({ installId: "installation-two", domain: "example.com", outcome: "never", purchaseId }), /already reported/);
-});
-
-test("Step 4: Order logs are recorded and exported without buyer personal data", async (t) => {
-  const store = new Store({ minReports: 1, salt: "test-salt" });
-  const srv = createServer(store, { rateLimit: 50, adminToken: "test-admin-token" });
-  await new Promise((r) => srv.listen(0, r));
-  t.after(() => srv.close());
+test("GET /v1/check returns a buyer summary and a Trustpilot link without outbound keys", async (t) => {
+  const store = new ReportStore({ file: ":memory:", salt: "test-salt-for-check-endpoint-32", secret: "test-secret-for-check-endpoint-32" });
+  const srv = createServer(store, { rateLimit: 50, readLimit: 300 });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  t.after(() => new Promise((r) => srv.close(r)));
   const base = `http://127.0.0.1:${srv.address().port}`;
-
-  // Post verified order outcome
-  const payload = {
-    installId: "install-buyer-999",
-    domain: "koadclo.com",
-    outcome: "never",
-    tags: ["delayed"],
-    purchaseId: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
-    storefrontName: "KOAD'CLO",
-    receiverName: null,
-    orderDate: "2026-10-10T12:00:00.000Z",
-    answerDate: "2026-10-24T12:00:00.000Z"
-  };
-
-  const credential = await (await fetch(`${base}/v1/register`, { method: "POST" })).json();
-  payload.installId = credential.installId;
-  const res = await fetch(`${base}/v1/report`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "authorization": `Bearer ${credential.token}` },
-    body: JSON.stringify(payload)
-  });
+  const res = await fetch(`${base}/v1/check?domain=koadclo.com`);
   assert.equal(res.status, 200);
-
-  // Query export endpoint
-  const expRes = await fetch(`${base}/v1/export/orders?format=json`, { headers: { authorization: "Bearer test-admin-token" } });
-  assert.equal(expRes.status, 200);
-  const json = await expRes.json();
-  assert.equal(json.total, 1);
-  const row = json.rows[0];
-  assert.equal(row.domain, "koadclo.com");
-  assert.equal(row.storefrontName, "KOAD'CLO");
-  assert.equal(row.receiverName, null);
-  assert.equal(row.outcome, "did_not_arrive");
-  assert.equal(row.orderDate, "2026-10-10T12:00:00.000Z");
-  assert.equal(row.answerDate, "2026-10-24T12:00:00.000Z");
-
-  // Also verify CSV export format
-  const csvRes = await fetch(`${base}/v1/export/orders?format=csv`, { headers: { authorization: "Bearer test-admin-token" } });
-  assert.equal(csvRes.status, 200);
-  const csv = await csvRes.text();
-  assert.ok(csv.includes('"koadclo.com","KOAD\'CLO",""'));
-  assert.ok(csv.includes('"did_not_arrive"'));
-
+  const body = await res.json();
+  assert.equal(body.domain, "koadclo.com");
+  assert.ok(body.summary);
+  assert.equal(body.summary.domain, "koadclo.com");
+  assert.equal(body.reviews.source, "Trustpilot");
+  assert.match(body.reviews.url, /koadclo\.com/);
+  assert.equal(body.safeBrowsing, null);
+  assert.equal(body.company, null);
+  const bad = await fetch(`${base}/v1/check?domain=`);
+  assert.equal(bad.status, 400);
 });

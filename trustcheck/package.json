@@ -4,7 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/trustcheck.test.js test/server.test.js test/themes.test.js test/companies.test.js test/deploy.test.js test/search.test.js test/merchant-rating.test.js test/unverified.test.js test/rdap.test.js test/history.test.js test/price.test.js test/corpus.test.js test/reminders.test.js test/buyer-warning.test.js",
-    "pack": "node tools/pack.js"
+    "test": "node test/run.mjs",
+    "validate": "node tools/validate_extension.mjs",
+    "package": "node tools/package.mjs",
+    "pack": "node tools/pack.js",
+    "build:psl": "node tools/build_psl.mjs",
+    "eval": "node eval/run.mjs",
+    "eval:check": "node eval/run.mjs --set dev --check",
+    "selftest": "node test/selftest/run.mjs",
+    "eval:holdout": "node eval/run.mjs --set holdout --check"
+  },
+  "engines": {
+    "node": ">=18.18"
   }
 }

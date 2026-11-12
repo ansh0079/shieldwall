@@ -129,6 +129,7 @@
     const keys = {
       enabled: true,
       siteModes: {},
+      siteContentExceptions: {},
       hideCookiePopups: true,
       zappedElements: {},
       genericSelectors: null,
@@ -165,7 +166,7 @@
         observer.disconnect();
         fn();
       }
-    }).observe(document.documentElement, { childList: true });
+    }).observe(document, { childList: true, subtree: true });
   }
 
   function insertChunk(sheet, selectors) {
@@ -322,8 +323,9 @@
     if (mode === SITE_MODE.OFF) return;
 
     const host = siteKey(location.hostname);
+    const contentException = getSiteContentException(host, data.siteContentExceptions);
     const parts = [];
-    if (mode === SITE_MODE.FULL) {
+    if (mode === SITE_MODE.FULL && !contentException) {
       parts.push(AD_SELECTORS.join(",\n") + " { display: none !important; }");
       parts.push(HAS_EMPTY_AD_CSS);
     }
@@ -344,19 +346,19 @@
       }
 
       // Site-specific cosmetics immediately; EasyList generics after idle.
-      if (mode === SITE_MODE.FULL) {
+      if (mode === SITE_MODE.FULL && !contentException) {
         const { site, unhide, generic } = collectSiteSelectors(data);
         injectSelectorSheet(STYLE_COSMETIC_SITE, site);
         deferGenericCosmetics(generic, unhide);
       }
     });
 
-    if (data.hideCookiePopups) {
+    if (data.hideCookiePopups && contentException?.stage !== "page") {
       scheduleCookieHide();
     }
 
     // Procedural cosmetic rules (has-text / upward / remove) run after DOM is ready.
-    if (mode === SITE_MODE.FULL && Array.isArray(data.proceduralRules) && data.proceduralRules.length) {
+    if (mode === SITE_MODE.FULL && !contentException && Array.isArray(data.proceduralRules) && data.proceduralRules.length) {
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", () => applyProceduralRules(data.proceduralRules), { once: true });
       } else {

@@ -102,8 +102,7 @@ function collectFiles(target = "chrome") {
     { path: "popup.js", content: fs.readFileSync(path.join(ROOT, "popup.js")) },
     { path: "options.html", content: fs.readFileSync(path.join(ROOT, "options.html")) },
     { path: "options.js", content: fs.readFileSync(path.join(ROOT, "options.js")) },
-    { path: "reminder.html", content: fs.readFileSync(path.join(ROOT, "reminder.html")) },
-    { path: "reminder.js", content: fs.readFileSync(path.join(ROOT, "reminder.js")) }
+    ...(["reminder.html", "reminder.js"].filter((f) => fs.existsSync(path.join(ROOT, f))).map((f) => ({ path: f, content: fs.readFileSync(path.join(ROOT, f)) })))
   ];
 
   // Add all files from lib/

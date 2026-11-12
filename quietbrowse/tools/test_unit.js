@@ -54,7 +54,8 @@ function loadScripts(files) {
   vm.runInContext(
       "if (typeof PhishScore !== 'undefined') globalThis.PhishScore = PhishScore;" +
       "if (typeof SITE_MODE !== 'undefined') globalThis.SITE_MODE = SITE_MODE;" +
-      "if (typeof getBaseDomain !== 'undefined') globalThis.getBaseDomain = getBaseDomain;",
+      "if (typeof getBaseDomain !== 'undefined') globalThis.getBaseDomain = getBaseDomain;" +
+      "if (typeof getSiteContentException !== 'undefined') globalThis.getSiteContentException = getSiteContentException;",
     context
   );
   return context;
@@ -126,16 +127,56 @@ console.log("PhishScore");
     assert(r.level === "danger" || r.level === "caution", "expected caution/danger");
     assert(r.riskScore > 0, "risk should be positive");
   });
-  test("enrich lowers score when protection off", () => {
+  test("enrich reports protection off without a site score", () => {
     const base = PhishScore.analyze("example.com", "https:", false);
     const enriched = PhishScore.enrich(base, {
       enabled: false,
-      siteMode: "full",
-      blockedCount: 0,
-      trackerCount: 0
+      siteMode: "off",
+      blockedCount: 3,
+      trackerCount: 1
     });
-    assert(enriched.level === "off" || enriched.trustScore == null || enriched.level, "enrich runs");
+    assert(enriched.level === "off", "expected off, got " + enriched.level);
+    assert(enriched.trustScore == null, "score hidden when protection is off");
+    assert(enriched.activityNote === "Protection is off", "activity note");
   });
+  test("enrich keeps the site score when many trackers are blocked", () => {
+    const base = PhishScore.analyze("example.com", "https:", false);
+    const enriched = PhishScore.enrich(base, {
+      enabled: true,
+      siteMode: "full",
+      blockedCount: 40,
+      trackerCount: 12
+    });
+    assert(enriched.trustScore === base.trustScore, "blocker stats must not change the score");
+    assert(enriched.level === base.level, "blocker stats must not change the level");
+    assert(!enriched.reasons.some((r) => /blocked|paused|Ads allowed/.test(r)), "reasons stay site-only");
+    assert(enriched.blockedCount === 40 && enriched.trackerCount === 12, "counts returned beside the score");
+    assert(enriched.activityNote.includes("40") && enriched.activityNote.includes("12"), "activity note");
+  });
+
+  const corpus = [
+    { name: "known brand", host: "www.google.com", protocol: "https:", password: false, level: "excellent", minScore: 90 },
+    { name: "brand country domain", host: "paypal.co.uk", protocol: "https:", password: false, level: "good", absent: "Brand name" },
+    { name: "brand inside a longer label", host: "login-paypal-secure.example", protocol: "https:", password: false, level: "danger", reason: "paypal" },
+    { name: "brand glued to a lure word", host: "loginpaypal.com", protocol: "https:", password: false, level: "danger", reason: "paypal" },
+    { name: "typosquat", host: "paypa1.com", protocol: "https:", password: false, level: "danger", reason: "misspelling" },
+    { name: "raw ip login", host: "1.2.3.4", protocol: "http:", password: true, level: "danger", reason: "IP address" },
+    { name: "risky tld", host: "shop.example.tk", protocol: "https:", password: false, level: "caution", reason: ".tk" },
+    { name: "external login on a real brand", host: "accounts.google.com", protocol: "https:", password: true, signals: { externalFormAction: true }, level: "caution", reason: "different site" },
+    { name: "user content host", host: "lh3.googleusercontent.com", protocol: "https:", password: false, notLevel: "excellent" },
+    { name: "amazonaws host", host: "login-paypal.amazonaws.com", protocol: "https:", password: false, notLevel: "excellent" },
+    { name: "azure host", host: "paypal.azurewebsites.net", protocol: "https:", password: false, notLevel: "excellent" }
+  ];
+  for (const row of corpus) {
+    test("corpus: " + row.name, () => {
+      const r = PhishScore.analyze(row.host, row.protocol, row.password, row.signals);
+      if (row.level) assert(r.level === row.level, row.host + " expected " + row.level + ", got " + r.level + " (" + r.reasons.join("; ") + ")");
+      if (row.notLevel) assert(r.level !== row.notLevel, row.host + " should not be " + row.notLevel);
+      if (row.minScore != null) assert(r.trustScore >= row.minScore, row.host + " score " + r.trustScore);
+      if (row.reason) assert(r.reasons.some((reason) => reason.includes(row.reason)), row.host + " missing reason " + row.reason + " in " + r.reasons.join("; "));
+      if (row.absent) assert(!r.reasons.some((reason) => reason.includes(row.absent)), row.host + " unexpected " + row.absent);
+    });
+  }
 }
 
 console.log("compact getBaseDomain (no PSL)");
@@ -147,20 +188,27 @@ console.log("compact getBaseDomain (no PSL)");
   test("compact fallback uses eTLD+1 for simple hosts", () => {
     assert(ctx.getBaseDomain("a.b.example.com") === "example.com", "simple eTLD+1");
   });
+  test("page fixes expire and use the most specific domain", () => {
+    const now = 1000;
+    const exceptions = {
+      "example.com": { stage: "cosmetics", expiresAt: 2000 },
+      "shop.example.com": { stage: "page", expiresAt: 2000 },
+      "expired.test": { stage: "page", expiresAt: 999 }
+    };
+    assert(ctx.getSiteContentException("www.shop.example.com", exceptions, now).stage === "page", "specific stage");
+    assert(ctx.getSiteContentException("expired.test", exceptions, now) === null, "expired fix");
+  });
 }
 
-console.log("trusted enterprise suffixes");
+console.log("official service hosts and shared hosting");
 {
   const ctx = loadScripts(["psl_data.js", "utils.js", "phish_score.js"]);
   const PhishScore = ctx.PhishScore;
   const trustedHosts = [
     "outlook.cloud.microsoft",
-    "contoso.onmicrosoft.com",
-    "contoso.sharepoint.com",
-    "cdn.office.net",
     "login.microsoftonline.com",
-    "storage.googleapis.com",
-    "lh3.googleusercontent.com"
+    "accounts.google.com",
+    "appleid.apple.com"
   ];
   for (const host of trustedHosts) {
     test("trusted: " + host, () => {
@@ -169,6 +217,17 @@ console.log("trusted enterprise suffixes");
       assert(r.trustScore >= 90, host + " trust score");
     });
   }
+  test("shared hosting receives no automatic trust", () => {
+    for (const host of ["contoso.sharepoint.com", "login-paypal.amazonaws.com", "paypal.azurewebsites.net"]) {
+      assert(PhishScore.analyze(host, "https:", true).level !== "excellent", host);
+    }
+  });
+  test("official host still surfaces insecure forms", () => {
+    const insecure = PhishScore.analyze("accounts.google.com", "http:", true);
+    assert(insecure.level !== "excellent" && insecure.reasons.some(r => r.includes("http")), "insecure login");
+    const external = PhishScore.analyze("accounts.google.com", "https:", true, { externalFormAction: true });
+    assert(external.level === "caution", "cross-site form action");
+  });
 }
 
 console.log("custom rules");
@@ -250,13 +309,32 @@ console.log("filter persistence");
 {
   const store = { cosmeticDomains: ["same.example", "gone.example"] };
   const removed = [];
+  const dnrUpdates = [];
+  const rulesetUpdates = [];
   const ctx = {
-    console, URL, TextDecoder, AbortController, setTimeout, clearTimeout,
+    console, URL, TextDecoder, AbortController, crypto, setTimeout, clearTimeout,
     OPTIONAL_FILTER_LISTS: [], DEFAULT_FILTER_URLS: [],
-    chrome: { storage: { local: {
-      get: async (defaults) => ({ ...defaults, ...store }),
+    EASYLIST_RULESET_ID: "easylist", EASYPRIVACY_RULESET_ID: "privacy",
+    UPDATE_ALLOW_ID_START: 100000, UPDATE_ID_END: 299999,
+    chrome: {
+      declarativeNetRequest: {
+        MAX_NUMBER_OF_DYNAMIC_RULES: 30000,
+        getDynamicRules: async () => dnrUpdates.at(-1)?.addRules || [],
+        updateDynamicRules: async (update) => dnrUpdates.push(update),
+        updateEnabledRulesets: async (update) => rulesetUpdates.push(update)
+      },
+      storage: { local: {
+      get: async (defaults) => {
+        if (Array.isArray(defaults)) {
+          return Object.fromEntries(defaults.map((key) => [key, store[key]]));
+        }
+        return { ...defaults, ...store };
+      },
       set: async (patch) => Object.assign(store, patch),
-      remove: async (keys) => removed.push(...keys)
+      remove: async (keys) => {
+        for (const key of Array.isArray(keys) ? keys : [keys]) delete store[key];
+        removed.push(...(Array.isArray(keys) ? keys : [keys]));
+      }
     } } }
   };
   ctx.globalThis = ctx;
@@ -265,7 +343,9 @@ console.log("filter persistence");
   vm.runInContext(
     "globalThis.seedSiteCosmetics = seedSiteCosmetics;" +
     "globalThis.seedProceduralRules = seedProceduralRules;" +
-    "globalThis.readFilterResponse = readFilterResponse;",
+    "globalThis.readFilterResponse = readFilterResponse;" +
+    "globalThis.applyFilterSnapshot = applyFilterSnapshot;" +
+    "globalThis.reconcilePendingFilterUpdate = reconcilePendingFilterUpdate;",
     ctx
   );
 
@@ -286,6 +366,25 @@ console.log("filter persistence");
     let rejected = false;
     try { await ctx.readFilterResponse(res, 100); } catch { rejected = true; }
     assert(rejected, "oversized response should be rejected");
+  });
+  test("recovers an interrupted filter transaction", async () => {
+    const candidate = {
+      rules: [{ id: 150000, priority: 1, action: { type: "block" }, condition: { urlFilter: "||ads.example^" } }],
+      useUpdatedLists: true,
+      genericSelectors: [".ad"],
+      proceduralRules: [],
+      siteHide: { "example.com": [".ad"] },
+      siteUnhide: {},
+      lastFilterUpdate: 123
+    };
+    store.enabled = true;
+    store.pendingFilterUpdate = { generation: "test-generation", candidate, previous: null };
+    const result = await ctx.reconcilePendingFilterUpdate();
+    assert(result.recovered === true, "transaction should recover");
+    assert(store.pendingFilterUpdate === undefined, "pending transaction should clear");
+    assert(store.lastFilterUpdate === 123 && store.updatedRules.length === 1, "candidate should commit");
+    assert(store["cs_example.com"][0] === ".ad", "cosmetics should commit");
+    assert(rulesetUpdates.some((u) => u.disableRulesetIds), "bundled lists should disable after install");
   });
 }
 
