@@ -34,7 +34,7 @@ export async function domainAge(domain, opts = {}) {
 // Full page URL check. A provider failure THROWS (shown as "unavailable"), it is never reported as clean.
 export async function safeBrowsing(url, key, opts = {}) {
   const body = {
-    client: { clientId: "trustcheck", clientVersion: "0.3.0" },
+    client: { clientId: "trustcheck", clientVersion: "0.3.1" },
     threatInfo: {
       threatTypes: ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
       platformTypes: ["ANY_PLATFORM"], threatEntryTypes: ["URL"], threatEntries: [{ url }]

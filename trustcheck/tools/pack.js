@@ -90,7 +90,7 @@ function collectFiles(target = "chrome") {
   const manifestFile = target === "firefox" ? "manifest.firefox.json" : "manifest.json";
   const manifestRaw = fs.readFileSync(path.join(ROOT, manifestFile), "utf8");
   const manifest = JSON.parse(manifestRaw);
-  const version = manifest.version || "0.3.0";
+  const version = manifest.version || "0.3.1";
 
   const fileList = [
     { path: "manifest.json", content: manifestRaw },
