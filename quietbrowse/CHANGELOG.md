@@ -2,6 +2,12 @@
 
 All notable changes to QuietBrowse are documented here.
 
+## [4.8.1] — 2026-11-13
+
+### Changed
+- **Site trust score** — no longer affected by blocker stats. The popup shows the site score, reasons, blocker activity, and a heuristic note separately.
+- **Phishing checks** — flag brand names embedded in another site's hostname, including hyphenated labels and common lure words.
+
 ## [4.8.0] — 2026-11-09
 
 ### Changed
