@@ -37,13 +37,13 @@ select{padding:5px}
 </fieldset>
 
 <fieldset><legend>On-page badge</legend>
-<label for="badge">When a rating is ready</label>
+<label for="badge">Show on-page notice automatically</label>
 <select id="badge">
-  <option value="auto">Show the badge and open it briefly (default)</option>
-  <option value="quiet">Show the badge, never auto-open it</option>
+  <option value="auto">Only when there is a warning (default)</option>
+  <option value="quiet">Never auto-open (badge stays collapsed)</option>
   <option value="off">Toolbar only: no on-page badge</option>
 </select>
-<small>The toolbar icon always shows the score, and Dangerous / High-risk checkout warnings appear in every mode. Sites where you clicked "hide on this site" stay hidden for 30 days.</small>
+<small>The toolbar icon always shows the score, and Dangerous / High-risk checkout warnings appear in every mode. On lower-risk shops the badge stays collapsed unless you hover or click it. Sites where you clicked "hide on this site" stay hidden for 30 days.</small>
 <p><button id="unhide" type="button">Show the badge again on all sites</button> <span id="unhidden"></span></p>
 </fieldset>
 

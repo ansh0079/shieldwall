@@ -104,6 +104,7 @@ public final class MainActivity extends Activity {
         JSONObject votes = report.optJSONObject("buyerOutcomes");
         if (votes != null) text("Buyer feedback, last 30 days: " + votes.optInt("ok") + " good, " + votes.optInt("problem") + " problems, " + votes.optInt("never") + " never arrived. Self-reported unless marked otherwise.");
         button("Read reviews on Trustpilot", v -> open("https://www.trustpilot.com/review/" + currentDomain));
+        button("Read reviews on Feefo", v -> open(feefoSearchUrl(currentDomain)));
         title("How did this seller do?");
         text("One tap sends an anonymous experience report. You can update your choice later.");
         feedbackDetails = input("Add details (optional, 300 characters)", "");
@@ -155,6 +156,13 @@ public final class MainActivity extends Activity {
         conn.disconnect();
         if (code >= 400) throw new Exception(new JSONObject(json).optString("error", "HTTP " + code));
         return new JSONObject(json);
+    }
+
+    private static String feefoSearchUrl(String domain) {
+        String host = domain == null ? "" : domain.trim();
+        int dot = host.indexOf('.');
+        String label = dot > 0 ? host.substring(0, dot) : host;
+        return "https://www.feefo.com/search-reviews/search-results?q=" + Uri.encode(label.replace('-', ' '));
     }
 
     private void open(String url) { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }

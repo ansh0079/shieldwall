@@ -4,6 +4,6 @@ export const DEFAULT_SETTINGS = {
   sbKey: "", tpKey: "", backend: "", chKey: "", sbTtlMin: 30,
   useRdap: true,            // domain-age lookup (rdap.org)
   useArchive: true,         // Internet Archive first-snapshot lookup
-  badgeMode: "auto",        // "auto" (badge, opens briefly) | "quiet" (badge, never auto-opens) | "off" (toolbar only)
+  badgeMode: "auto",        // "auto" (badge, auto-open only for warnings) | "quiet" (badge, never auto-opens) | "off" (toolbar only)
   orderReminders: true      // 14-day private order follow-up notifications
 };

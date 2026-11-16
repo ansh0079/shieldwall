@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BeforeYouBuy - Seller Check",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Real-time risk assessment, seller reviews and scam warnings for online stores.",
   "permissions": [
     "storage",
@@ -41,6 +41,7 @@
       ],
       "js": [
         "lib/merchant-rating.js",
+        "lib/notice.js",
         "content.js"
       ],
       "run_at": "document_idle"

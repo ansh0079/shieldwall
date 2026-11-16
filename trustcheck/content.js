@@ -217,12 +217,12 @@
     // Slide in only when first shown; a rebuild appears in place.
     if (fresh) requestAnimationFrame(() => requestAnimationFrame(() => drop.classList.add("in")));
     else { drop.style.transition = "none"; drop.classList.add("in"); }
-    // Auto-open on a new page/verdict, then collapse after a few seconds unless risky or hovered.
-    // "quiet" mode: the badge appears but never opens on its own.
+    // Auto-open only for a real warning (high risk, caution, or limited evidence with red flags).
+    // Lower-risk shops stay collapsed as a small badge. "quiet" mode never auto-opens.
     const pageKey = location.href + r.verdict;
     if (pageKey !== shownFor) {
       shownFor = pageKey;
-      if (r.ui?.mode !== "quiet") {
+      if (shouldAutoOpenNotice(r)) {
         setOpen(true);
         if (!severe(r.verdict)) setTimeout(() => {   // the badge may have been rebuilt since: act on whatever is live
           if (hovering) return;
@@ -301,17 +301,26 @@
     add("h2", "", "Why we're warning you"); card.append(reasons);
     if (r.missingChecks?.length) add("div", "sc", `${r.missingChecks.length} check${r.missingChecks.length === 1 ? "" : "s"} could not run, so this may be incomplete.`);
 
-    // Direct shop review link (Step 1):
+    // Direct shop review links (Step 1). Feefo has no domain slug, so this opens their official search.
     const tpUrl = r.reviews?.url || `https://www.trustpilot.com/review/${encodeURIComponent(r.domain)}`;
+    const feefoQuery = String(r.domain || "").split(".")[0].replace(/-/g, " ");
+    const feefoUrl = `https://www.feefo.com/search-reviews/search-results?q=${encodeURIComponent(feefoQuery)}`;
     const linkP = document.createElement("p");
     linkP.style.cssText = "margin:14px 0 10px;";
+    const linkStyle = "color:#2563eb;font-weight:700;text-decoration:underline;font-size:14px;";
     const tpLink = document.createElement("a");
     tpLink.href = tpUrl;
     tpLink.target = "_blank";
     tpLink.rel = "noreferrer";
-    tpLink.style.cssText = "color:#2563eb;font-weight:700;text-decoration:underline;font-size:14px;";
-    tpLink.textContent = `Trustpilot reviews for ${r.domain} \u2197`;
-    linkP.append(tpLink);
+    tpLink.style.cssText = linkStyle;
+    tpLink.textContent = `Trustpilot reviews for ${r.domain} ↗`;
+    const feefoLink = document.createElement("a");
+    feefoLink.href = feefoUrl;
+    feefoLink.target = "_blank";
+    feefoLink.rel = "noreferrer";
+    feefoLink.style.cssText = linkStyle;
+    feefoLink.textContent = `Feefo reviews for ${r.domain} ↗`;
+    linkP.append(tpLink, document.createElement("br"), feefoLink);
     card.append(linkP);
 
     add("h2", "", "Safer steps");

@@ -50,7 +50,7 @@ test("badge preferences ride on the report: quiet / toolbar-only modes and 30-da
   const visit = async () => { chrome.L.updated(12, { status: "complete" }, { url: C }); await new Promise((r) => setTimeout(r, 60)); };
   chrome.tabUrls.set(12, C);
   await visit();
-  assert.deepEqual(report().ui, { mode: "auto", hidden: false }, "defaults: badge on, auto-open");
+  assert.deepEqual(report().ui, { mode: "auto", hidden: false }, "defaults: badge on, auto-open only for warnings");
 
   await chrome.storage.local.set({ badgeMode: "quiet" });
   await visit();

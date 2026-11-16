@@ -3,6 +3,7 @@
 import { fetchJson, ProviderError } from "./http.js";
 import { validateRdap, validateCdx, validateSafeBrowsing, validateTrustpilotUnit, validateTrustpilotDetail, validateTrustpilotReviews } from "./validate.js";
 import { summarizeThemes } from "./themes.js";
+import { registrableDomain } from "./domain.js";
 
 // rdap.org redirects to the registry; for .com/.net also try Verisign's registry directly (confirmed endpoint).
 // Returns the registration date (ISO) or null when the registry publishes none.
@@ -34,7 +35,7 @@ export async function domainAge(domain, opts = {}) {
 // Full page URL check. A provider failure THROWS (shown as "unavailable"), it is never reported as clean.
 export async function safeBrowsing(url, key, opts = {}) {
   const body = {
-    client: { clientId: "trustcheck", clientVersion: "0.3.1" },
+    client: { clientId: "trustcheck", clientVersion: "0.3.2" },
     threatInfo: {
       threatTypes: ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"],
       platformTypes: ["ANY_PLATFORM"], threatEntryTypes: ["URL"], threatEntries: [{ url }]
@@ -86,11 +87,26 @@ export function signalsFromTrustpilotReviews(reviews) {
   return { reviews, signals: [{ id: "tp", ...sig, scope: "domain", detail: `${total.toLocaleString()} reviews.` }] };
 }
 
+// Feefo merchant pages use a slug, not the shop domain
+// (e.g. babyblooms.co.uk is /reviews/babyblooms-limited, not /reviews/babyblooms.co.uk).
+// Feefo's own search UI builds https://www.feefo.com/search-reviews/search-results?q=...
+// Search is by company name, so the query is the registrable label with hyphens as spaces.
+export function feefoSearchUrl(query) {
+  return `https://www.feefo.com/search-reviews/search-results?q=${encodeURIComponent(String(query || "").trim())}`;
+}
+
+export function feefoQueryFromDomain(domain) {
+  const reg = registrableDomain(domain) || String(domain || "").trim().toLowerCase();
+  const label = reg.split(".")[0] || reg;
+  return label.replace(/-/g, " ");
+}
+
 // Always available: deep links to independent review sources.
 export function reviewLinks(domain) {
   const d = encodeURIComponent(domain);
   return [
     { name: "Trustpilot", url: `https://www.trustpilot.com/review/${d}` },
+    { name: "Feefo", url: feefoSearchUrl(feefoQueryFromDomain(domain)) },
     { name: "ScamAdviser", url: `https://www.scamadviser.com/check-website/${d}` },
     { name: "Google: reviews", url: `https://www.google.com/search?q=${encodeURIComponent(`${d} reviews`)}` },
     { name: "Who.is record", url: `https://who.is/whois/${d}` }

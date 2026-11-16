@@ -22,6 +22,9 @@ test("seller source links identify the domain without implying imported scores",
   assert.match(links["Google: reviews"], /zeravi\.co\.uk%20reviews/);
   assert.equal(links.ScamAdviser, "https://www.scamadviser.com/check-website/zeravi.co.uk");
   assert.equal(links["Who.is record"], "https://who.is/whois/zeravi.co.uk");
+  assert.equal(links.Feefo, "https://www.feefo.com/search-reviews/search-results?q=zeravi");
+  const hire = Object.fromEntries(reviewLinks("www.lakeside-hire.co.uk").map(({ name, url }) => [name, url]));
+  assert.equal(hire.Feefo, "https://www.feefo.com/search-reviews/search-results?q=lakeside%20hire");
 });
 test("closed-tab UI races never become unhandled extension errors", async () => {
   assert.equal(await ignoreClosedTab(() => Promise.reject(new Error("No tab with id"))), null);

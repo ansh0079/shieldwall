@@ -136,7 +136,7 @@
       .v{font-weight:700}.d{color:#4b5563;font-size:11px;word-break:break-all}
       .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#4b5563;margin:10px 0 3px}
       .p{display:flex;gap:6px;margin:4px 0}.p i{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px;background:#9ca3af}
-      .good i{background:#15803d}.warn i{background:#b45309}.bad i{background:#b91c1c}.n{color:#4b5563;font-size:11px;margin-top:8px}.m{color:#374151;line-height:1.4}.k{color:#4b5563;font-size:11px}`;
+      .good i{background:#15803d}.warn i{background:#b45309}.bad i{background:#b91c1c}.n{color:#4b5563;font-size:11px;margin-top:8px}.m{color:#374151;line-height:1.4}.k{color:#4b5563;font-size:11px}.tp{display:block;margin-top:8px;color:#2563eb}`;
     const c = document.createElement("div"); c.className = "c";
     build(c); shadow.append(st, c);
     host.style.display = "block";
@@ -166,7 +166,10 @@
       const tp = el("a", "tp", `Search ${seller} on Trustpilot ↗`);
       tp.href = `https://www.trustpilot.com/search?query=${encodeURIComponent(seller)}`;
       tp.target = "_blank"; tp.rel = "noopener noreferrer";
-      c.append(tp);
+      const feefo = el("a", "tp", `Search ${seller} on Feefo ↗`);
+      feefo.href = `https://www.feefo.com/search-reviews/search-results?q=${encodeURIComponent(seller)}`;
+      feefo.target = "_blank"; feefo.rel = "noopener noreferrer";
+      c.append(tp, feefo);
     });
   }
 
